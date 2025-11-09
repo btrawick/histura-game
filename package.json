@@ -1,4 +1,10 @@
 {
+"homepage": "https://btrawick.github.io/histura-game",
+"scripts": {
+"predeploy": "pnpm build",
+"deploy": "gh-pages -d dist"
+}
+}{
   "name": "histura-game",
   "private": true,
   "version": "0.1.0",
