@@ -7,7 +7,6 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "allowJs": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "baseUrl": ".",
