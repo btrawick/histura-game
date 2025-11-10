@@ -1,13 +1,11 @@
-// src/routes/Settings.tsx
+// replaces the current file you have from earlier
 import { useGame } from '@/lib/store';
 
 export default function Settings() {
   const kind = useGame((s) => s.preferredKind);
   const setKind = useGame((s) => s.setPreferredKind);
-
-  function handleKind(next: 'audio' | 'video') {
-    setKind(next);
-  }
+  const starScale = useGame((s) => s.starScale);
+  const setStarScale = useGame((s) => s.setStarScale);
 
   return (
     <div className="container">
@@ -18,30 +16,45 @@ export default function Settings() {
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <button
             className={`button ${kind === 'video' ? '' : 'secondary'}`}
-            onClick={() => handleKind('video')}
+            onClick={() => setKind('video')}
+            title="Click again (when on Video) to switch camera"
           >
             Video
           </button>
           <button
             className={`button ${kind === 'audio' ? '' : 'secondary'}`}
-            onClick={() => handleKind('audio')}
+            onClick={() => setKind('audio')}
           >
             Audio
           </button>
         </div>
         <p style={{ opacity: 0.8, marginTop: 8 }}>
-          Prompts are now chosen by <b>Relationship</b> (set on the Home page). Categories UI has been removed.
+          Tip: In <b>Play</b>, clicking the Video button again switches cameras (if your device has more than one).
         </p>
       </div>
 
       <div className="card">
-        <div className="label">Storage & Export</div>
-        <p style={{ opacity: 0.9 }}>
-          Recordings are stored locally in your browser (IndexedDB). Use the <b>Playback</b> tab to export a ZIP
-          (media + JSON metadata).
+        <div className="label">Stars Timing</div>
+        <div style={{ marginTop: 8 }}>
+          <input
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={starScale}
+            onChange={(e) => setStarScale(Number(e.target.value))}
+            style={{ width: '100%' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.8 }}>
+            <span>Shorter answers ⭐ sooner</span>
+            <span>scale: {starScale.toFixed(1)}×</span>
+            <span>Longer answers ⭐ later</span>
+          </div>
+        </div>
+        <p style={{ opacity: 0.9, marginTop: 8 }}>
+          This scales the time thresholds (base: 30/45/60/90s). Example: 0.8× gives stars sooner; 1.5× slows them down.
         </p>
       </div>
     </div>
   );
 }
-
