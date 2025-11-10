@@ -1,3 +1,4 @@
+// src/hooks/useRecorder.ts
 import { useEffect, useRef, useState } from 'react';
 
 export function useRecorder(kind: 'audio' | 'video') {
@@ -13,7 +14,12 @@ export function useRecorder(kind: 'audio' | 'video') {
   const tickRef = useRef<number | null>(null);
   const attachRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
-  useEffect(() => () => stopClock(), []);
+  useEffect(() => {
+    return () => {
+      stopClock();
+      stopStream();
+    };
+  }, []);
 
   function stopClock() {
     if (tickRef.current) cancelAnimationFrame(tickRef.current);
@@ -38,10 +44,7 @@ export function useRecorder(kind: 'audio' | 'video') {
 
   async function ensurePermission() {
     try {
-      const constraints: MediaStreamConstraints =
-        kind === 'video'
-          ? { video: true, audio: true }
-          : { audio: true };
+      const constraints: MediaStreamConstraints = kind === 'video' ? { video: true, audio: true } : { audio: true };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       mediaRef.current = stream;
       setPermission('granted');
@@ -66,19 +69,22 @@ export function useRecorder(kind: 'audio' | 'video') {
 
     // If video: rebuild stream to respect specific camera device if set
     if (kind === 'video') {
-      const deviceId =
-        (videoInputs[videoIndex ?? 0]?.deviceId) || undefined;
+      const deviceId = videoInputs[videoIndex ?? 0]?.deviceId;
       stopStream();
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' },
       });
       mediaRef.current = stream;
       if (attachRef.current) (attachRef.current as any).srcObject = stream;
     }
 
     chunksRef.current = [];
-    const rec = new MediaRecorder(mediaRef.current!, pickMime());
+
+    const mimeType = pickMime();
+    const options: MediaRecorderOptions | undefined = mimeType ? { mimeType } : undefined;
+
+    const rec = new MediaRecorder(mediaRef.current!, options);
     recRef.current = rec;
     setRecording(true);
 
@@ -89,7 +95,9 @@ export function useRecorder(kind: 'audio' | 'video') {
     };
     tickRef.current = requestAnimationFrame(loop);
 
-    rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+    rec.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
+    };
     rec.start(100);
   }
 
@@ -100,7 +108,7 @@ export function useRecorder(kind: 'audio' | 'video') {
       rec.onstop = () => {
         stopClock();
         setRecording(false);
-        const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'application/octet-stream' });
         chunksRef.current = [];
         resolve(blob);
       };
@@ -115,19 +123,15 @@ export function useRecorder(kind: 'audio' | 'video') {
     if (!videoInputs.length) await refreshDevices();
     if (!videoInputs.length) return;
 
-    setVideoIndex((idx) => {
-      const next = ((idx ?? 0) + 1) % videoInputs.length;
-      return next;
-    });
+    const nextIdx = ((videoIndex ?? 0) + 1) % videoInputs.length;
+    setVideoIndex(nextIdx);
 
-    // rebuild stream on next start; also rebuild immediately for preview
-    const nextIdx = ((videoIndex ?? 0) + 1) % (videoInputs.length || 1);
     const deviceId = videoInputs[nextIdx]?.deviceId;
     if (deviceId) {
       stopStream();
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: { deviceId: { exact: deviceId } }
+        video: { deviceId: { exact: deviceId } },
       });
       mediaRef.current = stream;
       if (attachRef.current) (attachRef.current as any).srcObject = stream;
@@ -137,17 +141,22 @@ export function useRecorder(kind: 'audio' | 'video') {
   return { permission, recording, elapsed, start, stop, attach, ensurePermission, cycleCamera };
 }
 
-function pickMime(): string {
-  let mt = 'video/webm;codecs=vp9,opus';
-  // @ts-expect-error older browsers may not have isTypeSupported
-  if (!('MediaRecorder' in window) || !MediaRecorder.isTypeSupported?.(mt)) {
-    // @ts-expect-error
-    mt = MediaRecorder.isTypeSupported?.('video/webm;codecs=vp8,opus')
-      ? 'video/webm;codecs=vp8,opus'
-      // @ts-expect-error
-      : MediaRecorder.isTypeSupported?.('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : '';
+function isTypeSupported(m: string): boolean {
+  // Some browsers lack isTypeSupported or MediaRecorder
+  const MR: any = (globalThis as any).MediaRecorder;
+  return !!(MR && typeof MR.isTypeSupported === 'function' && MR.isTypeSupported(m));
+}
+
+function pickMime(): string | undefined {
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'audio/webm;codecs=opus',
+    'video/mp4', // may not be allowed/encodable by MediaRecorder in many browsers
+    'audio/mp4',
+  ];
+  for (const c of candidates) {
+    if (isTypeSupported(c)) return c;
   }
-  return mt;
+  return undefined;
 }
