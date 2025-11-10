@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 type OverlayMode = 'ready' | 'countdown';
 
-// helper: when P1 (Kid) is answering, pick prompts for Kid => from the OTHER side’s list
+// When P1 is answering, we pick prompts written for P1 (from the opposite side list)
 const promptSideForSpeaker = (speaker: 'p1' | 'p2'): 'p1' | 'p2' => (speaker === 'p1' ? 'p2' : 'p1');
 
 export default function Play() {
@@ -42,6 +42,7 @@ export default function Play() {
     mode: 'ready',
     count: 3,
   });
+
   const [endOpen, setEndOpen] = useState(false);
   const [lastPair, setLastPair] = useState<SavedRecording['meta'][]>([]);
   const [showSummary, setShowSummary] = useState(false);
@@ -56,7 +57,6 @@ export default function Play() {
   }, [mediaEl.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // relationship changed -> refresh prompt for whoever is answering next
     setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(currentPlayer)));
   }, [relationship, currentPlayer]);
 
@@ -81,7 +81,6 @@ export default function Play() {
 
   function startTurn(next: 'p1' | 'p2') {
     setCurrentPlayer(next);
-    // pull prompts FOR the speaker (so they answer)
     setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(next)));
     rec.start();
   }
@@ -116,13 +115,12 @@ export default function Play() {
     const pair = [...lastPair, meta];
     if (pair.length === 2 && pair.some((m) => m.playerId === 'p1') && pair.some((m) => m.playerId === 'p2')) {
       setLastPair([]);
-      setShowSummary(true);
-      setTimeout(() => setShowSummary(false), 4000);
+      setShowSummary(true); // user now dismisses using Continue
     } else {
       setLastPair(pair);
+      // show ready overlay for next player
+      setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
     }
-
-    setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
   }
 
   return (
@@ -147,7 +145,7 @@ export default function Play() {
             height={40}
             style={{ borderRadius: 8 }}
           />
-        <strong>{players[currentPlayer].name}</strong> ({players[currentPlayer].role})
+          <strong>{players[currentPlayer].name}</strong> ({players[currentPlayer].role})
         </div>
       </div>
 
@@ -227,7 +225,17 @@ export default function Play() {
         />
       )}
 
-      {showSummary && <RoundSummary onEndGame={() => setEndOpen(true)} />}
+      {showSummary && (
+        <RoundSummary
+          onEndGame={() => setEndOpen(true)}
+          onContinue={() => {
+            setShowSummary(false);
+            // after summary, go to ready overlay for the other player
+            const other: 'p1' | 'p2' = currentPlayer === 'p1' ? 'p2' : 'p1';
+            setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -262,7 +270,7 @@ function KindToggle({ onVideoClick, small }: { onVideoClick: () => void; small?:
   );
 }
 
-function RoundSummary({ onEndGame }: { onEndGame: () => void }) {
+function RoundSummary({ onEndGame, onContinue }: { onEndGame: () => void; onContinue: () => void }) {
   const { recordings, players } = useGame();
   const recent = recordings.slice(0, 2);
   if (recent.length < 2) return null;
@@ -290,9 +298,11 @@ function RoundSummary({ onEndGame }: { onEndGame: () => void }) {
         <div>
           Longest: <b>{longest}</b>
         </div>
-        <button className="button secondary" style={{ marginTop: 12 }} onClick={onEndGame}>
-          End Game
-        </button>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
+          <button className="button" onClick={onContinue}>Continue</button>
+          <button className="button secondary" onClick={onEndGame}>End Game</button>
+        </div>
       </div>
     </div>
   );
@@ -327,6 +337,7 @@ function EndGameOverlay({
             <b>{players.p2.score} pts</b>
           </div>
         </div>
+
         <div style={{ display: 'grid', gap: 8 }}>
           <button className="button" onClick={onFinish}>Finish & Review</button>
           <button className="button secondary" onClick={onRematch}>Rematch (keep players)</button>
