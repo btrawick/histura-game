@@ -27,6 +27,8 @@ addRecording: (rec: SavedRecording) => void
 removeRecording: (id: string) => void
 resetGame: () => void
 resetScores: () => void
+starScale: number;                 // 0.5 .. 2.0
+setStarScale: (n: number) => void;
 }
 
 
@@ -44,6 +46,8 @@ relationship: r,
 players: {
 p1: { ...s.players.p1, role: sideLabels[r].p1.toLowerCase() as any, name: s.players.p1.name || sideLabels[r].p1 },
 p2: { ...s.players.p2, role: sideLabels[r].p2.toLowerCase() as any, name: s.players.p2.name || sideLabels[r].p2 },
+starScale: 1,
+setStarScale: (n) => set({ starScale: Math.min(2, Math.max(0.5, n)) }),
 }
 })),
 setPlayer: (id, patch) => set((s) => ({ players: { ...s.players, [id]: { ...s.players[id], ...patch } } })),
