@@ -12,6 +12,9 @@ import { useNavigate } from 'react-router-dom';
 
 type OverlayMode = 'ready' | 'countdown';
 
+// helper: when P1 (Kid) is answering, pick prompts for Kid => from the OTHER side’s list
+const promptSideForSpeaker = (speaker: 'p1' | 'p2'): 'p1' | 'p2' => (speaker === 'p1' ? 'p2' : 'p1');
+
 export default function Play() {
   const navigate = useNavigate();
   const {
@@ -27,27 +30,24 @@ export default function Play() {
   } = useGame();
 
   const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
-  const [question, setQuestion] = useState(() => getRandomQuestionFor(relationship, 'p1'));
+  const [question, setQuestion] = useState(() =>
+    getRandomQuestionFor(relationship, promptSideForSpeaker('p1'))
+  );
   const rec = useRecorder(preferredKind);
   const mediaEl = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
-  // Ready overlay with preview + Start → 3-2-1 countdown
   const [overlay, setOverlay] = useState<{ show: boolean; next: 'p1' | 'p2'; mode: OverlayMode; count: number }>({
     show: true,
     next: 'p1',
     mode: 'ready',
     count: 3,
   });
-
-  // End-game overlay
   const [endOpen, setEndOpen] = useState(false);
-
   const [lastPair, setLastPair] = useState<SavedRecording['meta'][]>([]);
   const [showSummary, setShowSummary] = useState(false);
   const [confetti, setConfetti] = useState(0);
 
   useEffect(() => {
-    // Warm up permissions & devices so preview can show on the overlay.
     rec.ensurePermission().catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -56,7 +56,8 @@ export default function Play() {
   }, [mediaEl.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    setQuestion(getRandomQuestionFor(relationship, currentPlayer));
+    // relationship changed -> refresh prompt for whoever is answering next
+    setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(currentPlayer)));
   }, [relationship, currentPlayer]);
 
   function triggerConfetti() {
@@ -64,7 +65,6 @@ export default function Play() {
     setTimeout(() => setConfetti((n) => n - 1), 1200);
   }
 
-  // ⏳ Slower 3-2-1 countdown (1 second per step)
   function beginCountdown(next: 'p1' | 'p2') {
     setOverlay({ show: true, next, mode: 'countdown', count: 3 });
     let c = 3;
@@ -76,12 +76,13 @@ export default function Play() {
         setOverlay({ show: false, next, mode: 'ready', count: 3 });
         startTurn(next);
       }
-    }, 1000); // was 380ms
+    }, 1000);
   }
 
   function startTurn(next: 'p1' | 'p2') {
     setCurrentPlayer(next);
-    setQuestion(getRandomQuestionFor(relationship, next));
+    // pull prompts FOR the speaker (so they answer)
+    setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(next)));
     rec.start();
   }
 
@@ -108,12 +109,10 @@ export default function Play() {
 
     const other: 'p1' | 'p2' = currentPlayer === 'p1' ? 'p2' : 'p1';
 
-    // scoring + confetti when beating high score
     const prevHigh = highScore;
     addScore(currentPlayer, points);
     if (points + players[currentPlayer].score > prevHigh) triggerConfetti();
 
-    // end-of-round summary after both have spoken once
     const pair = [...lastPair, meta];
     if (pair.length === 2 && pair.some((m) => m.playerId === 'p1') && pair.some((m) => m.playerId === 'p2')) {
       setLastPair([]);
@@ -123,7 +122,6 @@ export default function Play() {
       setLastPair(pair);
     }
 
-    // Show ready overlay for the next player
     setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
   }
 
@@ -138,7 +136,7 @@ export default function Play() {
       </div>
 
       <div className="card">
-        <div className="label">Current Player</div>
+        <div className="label">Current Player (answering)</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <img
             src={
@@ -149,7 +147,7 @@ export default function Play() {
             height={40}
             style={{ borderRadius: 8 }}
           />
-          <strong>{players[currentPlayer].name}</strong> ({players[currentPlayer].role})
+        <strong>{players[currentPlayer].name}</strong> ({players[currentPlayer].role})
         </div>
       </div>
 
@@ -176,10 +174,9 @@ export default function Play() {
       {overlay.show && (
         <div className="overlay">
           <div className="overlay-card" style={{ width: 520, maxWidth: '95vw' }}>
-            <div className="label">Next Turn</div>
+            <div className="label">Next up (answering)</div>
             <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 8 }}>{players[overlay.next].name}</div>
 
-            {/* Live preview on the overlay */}
             <div className="card" style={{ background: '#0b1220', borderRadius: 12, padding: 12 }}>
               {preferredKind === 'video' ? (
                 <video ref={mediaEl as any} autoPlay muted playsInline style={{ width: '100%', borderRadius: 8 }} />
@@ -220,7 +217,7 @@ export default function Play() {
             setEndOpen(false);
             setOverlay({ show: true, next: 'p1', mode: 'ready', count: 3 });
             setCurrentPlayer('p1');
-            setQuestion(getRandomQuestionFor(relationship, 'p1'));
+            setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker('p1')));
           }}
           onNewGame={() => {
             resetGame();
@@ -240,7 +237,7 @@ function KindToggle({ onVideoClick, small }: { onVideoClick: () => void; small?:
   const setKind = useGame((s) => s.setPreferredKind);
 
   const handleVideo = () => {
-    if (kind === 'video') onVideoClick(); // cycle camera if already on video
+    if (kind === 'video') onVideoClick();
     else setKind('video');
   };
 
@@ -293,8 +290,6 @@ function RoundSummary({ onEndGame }: { onEndGame: () => void }) {
         <div>
           Longest: <b>{longest}</b>
         </div>
-
-        {/* Small End Game button right on the summary */}
         <button className="button secondary" style={{ marginTop: 12 }} onClick={onEndGame}>
           End Game
         </button>
@@ -332,7 +327,6 @@ function EndGameOverlay({
             <b>{players.p2.score} pts</b>
           </div>
         </div>
-
         <div style={{ display: 'grid', gap: 8 }}>
           <button className="button" onClick={onFinish}>Finish & Review</button>
           <button className="button secondary" onClick={onRematch}>Rematch (keep players)</button>
