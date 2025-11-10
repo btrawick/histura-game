@@ -1,4 +1,4 @@
-// src/routes/Play.tsx
+// replace your current Play.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '@/lib/store';
 import { useRecorder } from '@/hooks/useRecorder';
@@ -10,18 +10,14 @@ import type { SavedRecording } from '@/types';
 import { getRandomQuestionFor } from '@/lib/questions-relations';
 
 export default function Play() {
-  const { players, relationship, preferredKind, addScore, addRecording, highScore } = useGame();
+  const { players, relationship, preferredKind, addScore, addRecording, highScore, starScale } = useGame();
   const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
   const [question, setQuestion] = useState(() => getRandomQuestionFor(relationship, 'p1'));
   const rec = useRecorder(preferredKind);
   const mediaEl = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
-  // Overlay countdown state
-  const [overlay, setOverlay] = useState<{ show: boolean; next: 'p1' | 'p2'; count: number }>({
-    show: false,
-    next: 'p2',
-    count: 3,
-  });
+  // "Ready?" overlay instead of auto-start; show at beginning and after each stop.
+  const [overlay, setOverlay] = useState<{ show: boolean; next: 'p1' | 'p2' }>({ show: true, next: 'p1' });
   const [lastPair, setLastPair] = useState<SavedRecording['meta'][]>([]);
   const [showSummary, setShowSummary] = useState(false);
   const [confetti, setConfetti] = useState(0);
@@ -44,27 +40,18 @@ export default function Play() {
     setTimeout(() => setConfetti((n) => n - 1), 1200);
   }
 
-  function startCountdown(next: 'p1' | 'p2') {
-    setOverlay({ show: true, next, count: 3 });
-    let c = 3;
-    const iv = setInterval(() => {
-      c -= 1;
-      setOverlay((o) => ({ ...o, count: c }));
-      if (c === 0) {
-        clearInterval(iv);
-        setOverlay({ show: false, next, count: 3 });
-        setCurrentPlayer(next);
-        setQuestion(getRandomQuestionFor(relationship, next));
-        rec.start();
-      }
-    }, 380);
+  function startTurn(next: 'p1' | 'p2') {
+    setOverlay({ show: false, next });
+    setCurrentPlayer(next);
+    setQuestion(getRandomQuestionFor(relationship, next));
+    rec.start();
   }
 
   async function handleStop() {
     const blob = await rec.stop();
     if (!blob) return;
     const dur = rec.elapsed;
-    const points = pointsForDuration(dur);
+    const points = pointsForDuration(dur, starScale);
     const id = crypto.randomUUID();
     const blobKey = await saveBlob(blob);
     const meta: SavedRecording['meta'] = {
@@ -98,14 +85,14 @@ export default function Play() {
       setLastPair(pair);
     }
 
-    startCountdown(other);
+    // Show ready overlay for the next player (no auto-start)
+    setOverlay({ show: true, next: other });
   }
 
   return (
     <div className="container">
       {confetti > 0 && <div className="confetti">🎉✨🎊</div>}
       <h1>Play</h1>
-
       <div className="card">
         <div className="label">Current Player</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -129,7 +116,7 @@ export default function Play() {
         <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
           <RecordButton recording={rec.recording} onStart={rec.start} onStop={handleStop} />
           <div className="label">Kind</div>
-          <KindToggle />
+          <KindToggle onVideoClick={() => rec.cycleCamera()} />
         </div>
         <div style={{ marginTop: 16 }}>
           {rec.permission !== 'granted' ? (
@@ -147,7 +134,9 @@ export default function Play() {
           <div className="overlay-card">
             <div className="label">Next Turn</div>
             <div style={{ fontWeight: 800, fontSize: 22 }}>{players[overlay.next].name}</div>
-            <div className="count">{overlay.count}</div>
+            <button className="button" style={{ marginTop: 12 }} onClick={() => startTurn(overlay.next)}>
+              Start
+            </button>
           </div>
         </div>
       )}
@@ -157,12 +146,18 @@ export default function Play() {
   );
 }
 
-function KindToggle() {
+function KindToggle({ onVideoClick }: { onVideoClick: () => void }) {
   const kind = useGame((s) => s.preferredKind);
   const setKind = useGame((s) => s.setPreferredKind);
+
+  const handleVideo = () => {
+    if (kind === 'video') onVideoClick(); // switch camera
+    else setKind('video');
+  };
+
   return (
     <div style={{ display: 'flex', gap: 6 }}>
-      <button className={`button ${kind === 'video' ? '' : 'secondary'}`} onClick={() => setKind('video')}>
+      <button className={`button ${kind === 'video' ? '' : 'secondary'}`} onClick={handleVideo}>
         Video
       </button>
       <button className={`button ${kind === 'audio' ? '' : 'secondary'}`} onClick={() => setKind('audio')}>
@@ -174,7 +169,7 @@ function KindToggle() {
 
 function RoundSummary() {
   const { recordings, players } = useGame();
-  const recent = recordings.slice(0, 2); // last pair
+  const recent = recordings.slice(0, 2);
   if (recent.length < 2) return null;
   const p1 = recent.find((r) => r.meta.playerId === 'p1')!;
   const p2 = recent.find((r) => r.meta.playerId === 'p2')!;
