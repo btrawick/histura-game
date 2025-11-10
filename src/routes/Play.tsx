@@ -8,23 +8,39 @@ import { pointsForDuration } from '@/lib/scoring';
 import { saveBlob } from '@/lib/storage';
 import type { SavedRecording } from '@/types';
 import { getRandomQuestionFor } from '@/lib/questions-relations';
+import { useNavigate } from 'react-router-dom';
 
 type OverlayMode = 'ready' | 'countdown';
 
 export default function Play() {
-  const { players, relationship, preferredKind, addScore, addRecording, highScore, starScale } = useGame();
+  const navigate = useNavigate();
+  const {
+    players,
+    relationship,
+    preferredKind,
+    addScore,
+    addRecording,
+    highScore,
+    starScale,
+    resetScores,
+    resetGame,
+  } = useGame();
+
   const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
   const [question, setQuestion] = useState(() => getRandomQuestionFor(relationship, 'p1'));
   const rec = useRecorder(preferredKind);
   const mediaEl = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
-  // Ready overlay with preview, optional countdown before recording starts
+  // Ready overlay with preview + Start → 3-2-1 countdown
   const [overlay, setOverlay] = useState<{ show: boolean; next: 'p1' | 'p2'; mode: OverlayMode; count: number }>({
     show: true,
     next: 'p1',
     mode: 'ready',
     count: 3,
   });
+
+  // End-game overlay
+  const [endOpen, setEndOpen] = useState(false);
 
   const [lastPair, setLastPair] = useState<SavedRecording['meta'][]>([]);
   const [showSummary, setShowSummary] = useState(false);
@@ -40,7 +56,6 @@ export default function Play() {
   }, [mediaEl.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // relationship changed -> refresh question for current side
     setQuestion(getRandomQuestionFor(relationship, currentPlayer));
   }, [relationship, currentPlayer]);
 
@@ -107,14 +122,19 @@ export default function Play() {
       setLastPair(pair);
     }
 
-    // Show ready overlay for the next player -> Start triggers countdown
+    // Show ready overlay for the next player
     setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
   }
 
   return (
     <div className="container">
       {confetti > 0 && <div className="confetti">🎉✨🎊</div>}
-      <h1>Play</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1>Play</h1>
+        <button className="button secondary" onClick={() => setEndOpen(true)} title="Finish or reset the game">
+          End Game
+        </button>
+      </div>
 
       <div className="card">
         <div className="label">Current Player</div>
@@ -168,7 +188,6 @@ export default function Play() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 10 }}>
-              {/* Switch camera only when already on video mode */}
               {preferredKind === 'video' && (
                 <button className="button secondary" onClick={() => rec.cycleCamera()}>
                   Switch camera
@@ -178,11 +197,7 @@ export default function Play() {
             </div>
 
             {overlay.mode === 'ready' ? (
-              <button
-                className="button"
-                style={{ marginTop: 12 }}
-                onClick={() => beginCountdown(overlay.next)}
-              >
+              <button className="button" style={{ marginTop: 12 }} onClick={() => beginCountdown(overlay.next)}>
                 Start
               </button>
             ) : (
@@ -190,6 +205,28 @@ export default function Play() {
             )}
           </div>
         </div>
+      )}
+
+      {endOpen && (
+        <EndGameOverlay
+          onClose={() => setEndOpen(false)}
+          onFinish={() => {
+            setEndOpen(false);
+            navigate('/playback');
+          }}
+          onRematch={() => {
+            resetScores();
+            setEndOpen(false);
+            setOverlay({ show: true, next: 'p1', mode: 'ready', count: 3 });
+            setCurrentPlayer('p1');
+            setQuestion(getRandomQuestionFor(relationship, 'p1'));
+          }}
+          onNewGame={() => {
+            resetGame();
+            setEndOpen(false);
+            navigate('/');
+          }}
+        />
       )}
 
       {showSummary && <RoundSummary />}
@@ -254,6 +291,47 @@ function RoundSummary() {
         </div>
         <div>
           Longest: <b>{longest}</b>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EndGameOverlay({
+  onClose,
+  onFinish,
+  onRematch,
+  onNewGame,
+}: {
+  onClose: () => void;
+  onFinish: () => void;
+  onRematch: () => void;
+  onNewGame: () => void;
+}) {
+  const { players } = useGame();
+  return (
+    <div className="overlay">
+      <div className="overlay-card" style={{ width: 520, maxWidth: '95vw' }}>
+        <div className="label">End Game</div>
+        <div style={{ margin: '6px 0 12px', opacity: 0.85 }}>
+          You can review and export recordings on the <b>Playback</b> tab.
+        </div>
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <span>{players.p1.name}</span>
+            <b>{players.p1.score} pts</b>
+          </div>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <span>{players.p2.name}</span>
+            <b>{players.p2.score} pts</b>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <button className="button" onClick={onFinish}>Finish & Review</button>
+          <button className="button secondary" onClick={onRematch}>Rematch (keep players)</button>
+          <button className="button secondary" onClick={onNewGame}>New Game (reset all)</button>
+          <button className="button ghost" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>
