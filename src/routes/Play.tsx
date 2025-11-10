@@ -64,6 +64,7 @@ export default function Play() {
     setTimeout(() => setConfetti((n) => n - 1), 1200);
   }
 
+  // ⏳ Slower 3-2-1 countdown (1 second per step)
   function beginCountdown(next: 'p1' | 'p2') {
     setOverlay({ show: true, next, mode: 'countdown', count: 3 });
     let c = 3;
@@ -75,7 +76,7 @@ export default function Play() {
         setOverlay({ show: false, next, mode: 'ready', count: 3 });
         startTurn(next);
       }
-    }, 380);
+    }, 1000); // was 380ms
   }
 
   function startTurn(next: 'p1' | 'p2') {
@@ -229,7 +230,7 @@ export default function Play() {
         />
       )}
 
-      {showSummary && <RoundSummary />}
+      {showSummary && <RoundSummary onEndGame={() => setEndOpen(true)} />}
     </div>
   );
 }
@@ -264,7 +265,7 @@ function KindToggle({ onVideoClick, small }: { onVideoClick: () => void; small?:
   );
 }
 
-function RoundSummary() {
+function RoundSummary({ onEndGame }: { onEndGame: () => void }) {
   const { recordings, players } = useGame();
   const recent = recordings.slice(0, 2);
   if (recent.length < 2) return null;
@@ -292,6 +293,11 @@ function RoundSummary() {
         <div>
           Longest: <b>{longest}</b>
         </div>
+
+        {/* Small End Game button right on the summary */}
+        <button className="button secondary" style={{ marginTop: 12 }} onClick={onEndGame}>
+          End Game
+        </button>
       </div>
     </div>
   );
