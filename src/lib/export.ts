@@ -1,17 +1,26 @@
 // src/lib/export.ts
 import JSZip from 'jszip';
 import { getBlob } from '@/lib/storage';
-import type { SavedRecording } from '@/types';
+import { questions } from '@/lib/questions-relations';
+import type { GameSession, SavedRecording } from '@/types';
 
-export async function exportGameZip(gameId: string, recs: SavedRecording[], title: string) {
+export async function exportGameZip(game: GameSession, recs: SavedRecording[]) {
   const zip = new JSZip();
-  const folder = zip.folder(safe(title)) || zip;
+
+  const folderName = `(${safe(game.p1Name)}_vs_${safe(game.p2Name)}_${fmtDate(game.startedAt)})`;
+  const folder = zip.folder(folderName) || zip;
 
   for (const r of recs) {
     const blob = await getBlob(r.blobKey);
     if (!blob) continue;
-    const ext = r.meta.kind === 'video' ? 'webm' : 'webm'; // recorder uses webm typically
-    const fname = `${r.meta.startedAt}-${r.meta.playerId}-${r.meta.points}pts.${ext}`;
+
+    const q = lookupQuestion(r.meta.questionId)?.text ?? r.meta.questionId;
+    const playerName = r.meta.playerId === 'p1' ? game.p1Name : game.p2Name;
+
+    const base = `${playerName} — ${truncate(q, 60)}`; // Name — truncated question
+    const ext = guessExt(r.meta.mimeType) || 'webm';
+    const fname = `${safe(base)}.${ext}`;
+
     folder.file(fname, blob);
   }
 
@@ -19,11 +28,45 @@ export async function exportGameZip(gameId: string, recs: SavedRecording[], titl
   const url = URL.createObjectURL(out);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${safe(title)}.zip`;
+  a.download = `${folderName}.zip`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-function safe(s: string) { return s.replace(/[^\w.-]+/g, '_'); }
+function lookupQuestion(id: string) {
+  for (const rel of Object.keys(questions) as Array<keyof typeof questions>) {
+    for (const side of ['p1', 'p2'] as const) {
+      const found = questions[rel][side].find((q) => q.id === id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function guessExt(mime: string | undefined) {
+  if (!mime) return null;
+  if (mime.includes('mp4')) return 'mp4';
+  if (mime.includes('webm')) return 'webm';
+  if (mime.includes('ogg')) return 'ogg';
+  if (mime.includes('wav')) return 'wav';
+  if (mime.includes('mpeg')) return 'mp3';
+  return null;
+}
+
+function fmtDate(ts: number) {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function truncate(s: string, n: number) {
+  return s.length <= n ? s : s.slice(0, n - 1) + '…';
+}
+
+function safe(s: string) {
+  return s.replace(/[^\w.\- ]+/g, '_').trim().replace(/\s+/g, ' ');
+}
