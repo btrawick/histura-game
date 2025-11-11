@@ -1,8 +1,6 @@
 // src/lib/store.ts
 import { create } from 'zustand';
-import { Player, SavedRecording } from '@/types';
-
-export type Relationship = 'kid-parent' | 'adultchild-parent' | 'friend-friend' | 'kid-grandparent';
+import { Player, SavedRecording, GameSession, Relationship } from '@/types';
 
 export const sideLabels: Record<Relationship, { p1: string; p2: string }> = {
   'kid-parent': { p1: 'Kid', p2: 'Parent' },
@@ -18,12 +16,17 @@ interface GameState {
   recordings: SavedRecording[];
   highScore: number;
 
+  // ⭐ timing scale
   starScale: number;
   setStarScale: (n: number) => void;
 
+  // 🎮 games
+  currentGameId: string;
+  games: GameSession[];
+  startNewGame: () => void;
+
   setRelationship: (r: Relationship) => void;
   setPlayer: (id: 'p1' | 'p2', patch: Partial<Player>) => void;
-  /** Swap Player 1 and Player 2 entirely (names, avatars, scores, roles). */
   swapPlayers: () => void;
 
   addScore: (id: 'p1' | 'p2', delta: number) => void;
@@ -41,75 +44,99 @@ const defaultPlayer = (id: 'p1' | 'p2', label: string): Player => ({
   score: 0,
 });
 
-export const useGame = create<GameState>((set, get) => ({
-  relationship: 'kid-parent',
-  players: {
-    p1: defaultPlayer('p1', sideLabels['kid-parent'].p1),
-    p2: defaultPlayer('p2', sideLabels['kid-parent'].p2),
-  },
-  preferredKind: 'video',
-  recordings: [],
-  highScore: 0,
+const newGameId = () => crypto.randomUUID();
 
-  starScale: 1,
-  setStarScale: (n: number) => set({ starScale: Math.min(2, Math.max(0.5, n)) }),
+export const useGame = create<GameState>((set, get) => {
+  const initialRel: Relationship = 'kid-parent';
+  const initialGame: GameSession = {
+    id: newGameId(),
+    startedAt: Date.now(),
+    relationship: initialRel,
+    p1Name: sideLabels[initialRel].p1,
+    p2Name: sideLabels[initialRel].p2,
+  };
 
-  setRelationship: (r) =>
-    set((s) => ({
-      relationship: r,
-      players: {
-        // keep names/avatars, but update roles to match the relationship
-        p1: { ...s.players.p1, role: sideLabels[r].p1.toLowerCase() as any },
-        p2: { ...s.players.p2, role: sideLabels[r].p2.toLowerCase() as any },
-      },
-    })),
+  return {
+    relationship: initialRel,
+    players: {
+      p1: defaultPlayer('p1', sideLabels[initialRel].p1),
+      p2: defaultPlayer('p2', sideLabels[initialRel].p2),
+    },
+    preferredKind: 'video',
+    recordings: [],
+    highScore: 0,
 
-  setPlayer: (id, patch) =>
-    set((s) => ({ players: { ...s.players, [id]: { ...s.players[id], ...patch } } })),
+    starScale: 1,
+    setStarScale: (n) => set({ starScale: Math.min(2, Math.max(0.5, n)) }),
 
-  swapPlayers: () =>
-    set((s) => ({
-      players: {
-        // swap FULL objects so roles, scores, avatars, names all swap
-        p1: { ...s.players.p2, id: 'p1' },
-        p2: { ...s.players.p1, id: 'p2' },
-      },
-    })),
+    currentGameId: initialGame.id,
+    games: [initialGame],
+    startNewGame: () =>
+      set((s) => {
+        const g: GameSession = {
+          id: newGameId(),
+          startedAt: Date.now(),
+          relationship: s.relationship,
+          p1Name: s.players.p1.name || sideLabels[s.relationship].p1,
+          p2Name: s.players.p2.name || sideLabels[s.relationship].p2,
+        };
+        return { currentGameId: g.id, games: [g, ...s.games], highScore: 0, players: {
+          p1: { ...s.players.p1, score: 0 },
+          p2: { ...s.players.p2, score: 0 },
+        }};
+      }),
 
-  addScore: (id, delta) =>
-    set((s) => {
-      const newScore = Math.max(0, s.players[id].score + delta);
-      const newHigh = Math.max(s.highScore, newScore);
-      return {
-        players: { ...s.players, [id]: { ...s.players[id], score: newScore } },
-        highScore: newHigh,
-      };
-    }),
+    setRelationship: (r) =>
+      set((s) => ({
+        relationship: r,
+        players: {
+          p1: { ...s.players.p1, role: sideLabels[r].p1.toLowerCase() as any },
+          p2: { ...s.players.p2, role: sideLabels[r].p2.toLowerCase() as any },
+        },
+      })),
 
-  setPreferredKind: (k) => set({ preferredKind: k }),
+    setPlayer: (id, patch) =>
+      set((s) => ({ players: { ...s.players, [id]: { ...s.players[id], ...patch } } })),
 
-  addRecording: (rec) => set((s) => ({ recordings: [rec, ...s.recordings] })),
+    swapPlayers: () =>
+      set((s) => ({
+        players: { p1: { ...s.players.p2, id: 'p1' }, p2: { ...s.players.p1, id: 'p2' } },
+      })),
 
-  removeRecording: (rid) =>
-    set((s) => ({ recordings: s.recordings.filter((r) => r.meta.id !== rid) })),
+    addScore: (id, delta) =>
+      set((s) => {
+        const newScore = Math.max(0, s.players[id].score + delta);
+        const newHigh = Math.max(s.highScore, newScore);
+        return {
+          players: { ...s.players, [id]: { ...s.players[id], score: newScore } },
+          highScore: newHigh,
+        };
+      }),
 
-  resetGame: () =>
-    set((s) => ({
-      players: {
-        p1: defaultPlayer('p1', sideLabels[s.relationship].p1),
-        p2: defaultPlayer('p2', sideLabels[s.relationship].p2),
-      },
-      recordings: [],
-      highScore: 0,
-    })),
+    setPreferredKind: (k) => set({ preferredKind: k }),
 
-  resetScores: () =>
-    set((s) => ({
-      players: {
-        p1: { ...s.players.p1, score: 0 },
-        p2: { ...s.players.p2, score: 0 },
-      },
-      highScore: 0,
-    })),
-}));
+    addRecording: (rec) => set((s) => ({ recordings: [rec, ...s.recordings] })),
 
+    removeRecording: (rid) =>
+      set((s) => ({ recordings: s.recordings.filter((r) => r.meta.id !== rid) })),
+
+    resetGame: () =>
+      set((s) => ({
+        players: {
+          p1: defaultPlayer('p1', sideLabels[s.relationship].p1),
+          p2: defaultPlayer('p2', sideLabels[s.relationship].p2),
+        },
+        recordings: [],
+        highScore: 0,
+      })),
+
+    resetScores: () =>
+      set((s) => ({
+        players: {
+          p1: { ...s.players.p1, score: 0 },
+          p2: { ...s.players.p2, score: 0 },
+        },
+        highScore: 0,
+      })),
+  };
+});
