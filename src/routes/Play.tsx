@@ -172,10 +172,17 @@ export default function Play() {
               <KindToggle small onVideoClick={() => rec.cycleCamera()} />
             </div>
 
-            {overlay.mode === 'ready'
-              ? <button className="button" style={{ marginTop: 12 }} onClick={() => beginCountdown(overlay.next)}>Start</button>
-              : <div className="count" style={{ marginTop: 12 }}>{overlay.count}</div>
-            }
+    {overlay.mode === 'ready' ? (
+  <button
+    className="button"
+    style={{ marginTop: 12 }}
+    onClick={() => beginCountdown(overlay.next)}
+  >
+    Start
+  </button>
+) : (
+  <div className="count" style={{ marginTop: 12 }}>{overlay.count}</div>
+)}
           </div>
         </div>
       )}
