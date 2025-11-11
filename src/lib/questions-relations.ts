@@ -1,5 +1,5 @@
 // src/lib/questions-relations.ts
-import { Relationship } from '@/lib/store'
+import type { Relationship } from '@/types';
 
 export type RelationSide = 'p1' | 'p2'
 export interface RelationQuestion { id: string; text: string; bucket: string }
