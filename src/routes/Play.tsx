@@ -149,12 +149,19 @@ export default function Play() {
             <div className="label">Next up (answering)</div>
             <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 8 }}>{players[overlay.next].name}</div>
 
-            <div className="card" style={{ background: '#0b1220', borderRadius: 12, padding: 12 }}>
-              {preferredKind === 'video'
-                ? <video ref={overlayMediaRef as any} autoPlay muted playsInline style={{ width: '100%', borderRadius: 8 }} />
-                : <audio ref={overlayMediaRef as any} autoPlay />
-              }
-            </div>
+<div className="card" style={{ background: '#0b1220', borderRadius: 12, padding: 12 }}>
+  {preferredKind === 'video' ? (
+    <video
+      ref={overlayMediaRef as any}
+      autoPlay
+      muted
+      playsInline
+      style={{ width: '100%', borderRadius: 8 }}
+    />
+  ) : (
+    <audio ref={overlayMediaRef as any} autoPlay />
+  )}
+</div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 10 }}>
               {preferredKind === 'video' && (
