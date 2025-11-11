@@ -18,12 +18,14 @@ interface GameState {
   recordings: SavedRecording[];
   highScore: number;
 
-  // ⭐ Adjustable star timing scale (0.5 .. 2.0). 1.0 = default thresholds.
   starScale: number;
   setStarScale: (n: number) => void;
 
   setRelationship: (r: Relationship) => void;
   setPlayer: (id: 'p1' | 'p2', patch: Partial<Player>) => void;
+  /** Swap Player 1 and Player 2 entirely (names, avatars, scores, roles). */
+  swapPlayers: () => void;
+
   addScore: (id: 'p1' | 'p2', delta: number) => void;
   setPreferredKind: (k: 'audio' | 'video') => void;
   addRecording: (rec: SavedRecording) => void;
@@ -56,21 +58,23 @@ export const useGame = create<GameState>((set, get) => ({
     set((s) => ({
       relationship: r,
       players: {
-        p1: {
-          ...s.players.p1,
-          role: sideLabels[r].p1.toLowerCase() as any,
-          name: s.players.p1.name || sideLabels[r].p1,
-        },
-        p2: {
-          ...s.players.p2,
-          role: sideLabels[r].p2.toLowerCase() as any,
-          name: s.players.p2.name || sideLabels[r].p2,
-        },
+        // keep names/avatars, but update roles to match the relationship
+        p1: { ...s.players.p1, role: sideLabels[r].p1.toLowerCase() as any },
+        p2: { ...s.players.p2, role: sideLabels[r].p2.toLowerCase() as any },
       },
     })),
 
   setPlayer: (id, patch) =>
     set((s) => ({ players: { ...s.players, [id]: { ...s.players[id], ...patch } } })),
+
+  swapPlayers: () =>
+    set((s) => ({
+      players: {
+        // swap FULL objects so roles, scores, avatars, names all swap
+        p1: { ...s.players.p2, id: 'p1' },
+        p2: { ...s.players.p1, id: 'p2' },
+      },
+    })),
 
   addScore: (id, delta) =>
     set((s) => {
@@ -108,3 +112,4 @@ export const useGame = create<GameState>((set, get) => ({
       highScore: 0,
     })),
 }));
+
