@@ -2,11 +2,13 @@
 import { useGame, sideLabels, Relationship } from '@/lib/store';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AvatarCapture from '@/components/AvatarCapture';
 
 export default function Home() {
   const navigate = useNavigate();
   const { relationship, setRelationship, players, setPlayer, resetScores, swapPlayers } = useGame();
   const [rel, setRel] = useState<Relationship>(relationship);
+  const [captureFor, setCaptureFor] = useState<null | 'p1' | 'p2'>(null);
 
   useEffect(() => setRel(relationship), [relationship]);
 
@@ -16,7 +18,6 @@ export default function Home() {
     <div className="container">
       <h1>Home</h1>
 
-      {/* Relationship selector (lean) */}
       <div className="card" style={{ display: 'grid', gap: 8 }}>
         <div className="label">Relationship Mode</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
@@ -36,7 +37,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Players section with Play button placed here */}
       <div
         className="card"
         style={{
@@ -60,7 +60,11 @@ export default function Home() {
             <select value={labels.p1} disabled>
               <option>{labels.p1}</option>
             </select>
-            <AvatarPreview name={players.p1.name || labels.p1} dataUrl={players.p1.avatarDataUrl} />
+            <AvatarPreview
+              name={players.p1.name || labels.p1}
+              dataUrl={players.p1.avatarDataUrl}
+              onClick={() => setCaptureFor('p1')}
+            />
           </div>
         </div>
 
@@ -78,7 +82,11 @@ export default function Home() {
             <select value={labels.p2} disabled>
               <option>{labels.p2}</option>
             </select>
-            <AvatarPreview name={players.p2.name || labels.p2} dataUrl={players.p2.avatarDataUrl} />
+            <AvatarPreview
+              name={players.p2.name || labels.p2}
+              dataUrl={players.p2.avatarDataUrl}
+              onClick={() => setCaptureFor('p2')}
+            />
           </div>
         </div>
 
@@ -92,7 +100,6 @@ export default function Home() {
           <button
             className="button"
             onClick={() => {
-              // apply relationship, reset scores, and go Play
               setRelationship(rel);
               resetScores();
               navigate('/play');
@@ -103,11 +110,32 @@ export default function Home() {
           </button>
         </div>
       </div>
+
+      {captureFor && (
+        <AvatarCapture
+          onCancel={() => setCaptureFor(null)}
+          onSave={(dataUrl) => {
+            // persist avatar to the chosen player
+            // (keeps name/role/score intact)
+            const id = captureFor;
+            setPlayer(id, { avatarDataUrl: dataUrl });
+            setCaptureFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function AvatarPreview({ name, dataUrl }: { name: string; dataUrl?: string }) {
+function AvatarPreview({
+  name,
+  dataUrl,
+  onClick,
+}: {
+  name: string;
+  dataUrl?: string;
+  onClick?: () => void;
+}) {
   const src =
     dataUrl || `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(name || 'player')}`;
   return (
@@ -116,9 +144,17 @@ function AvatarPreview({ name, dataUrl }: { name: string; dataUrl?: string }) {
       width={72}
       height={72}
       alt="avatar"
-      style={{ borderRadius: 12, width: 72, height: 72, objectFit: 'cover', background: '#0b1220' }}
+      onClick={onClick}
+      style={{
+        borderRadius: 12,
+        width: 72,
+        height: 72,
+        objectFit: 'cover',
+        background: '#0b1220',
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: onClick ? '0 0 0 2px rgba(255,255,255,0.06)' : undefined,
+      }}
+      title={onClick ? 'Click to take profile photo' : undefined}
     />
   );
 }
-
-
