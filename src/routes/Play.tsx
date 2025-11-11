@@ -34,7 +34,12 @@ export default function Play() {
     getRandomQuestionFor(relationship, promptSideForSpeaker('p1'))
   );
   const rec = useRecorder(preferredKind);
-  const mediaEl = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+
+  // 🔧 Two distinct media elements to avoid racey refs:
+  //   - one for the main card during recording/idle
+  //   - one for the overlay preview
+  const mainMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+  const overlayMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
   const [overlay, setOverlay] = useState<{ show: boolean; next: 'p1' | 'p2'; mode: OverlayMode; count: number }>({
     show: true,
@@ -49,12 +54,15 @@ export default function Play() {
   const [confetti, setConfetti] = useState(0);
 
   useEffect(() => {
+    // Warm up permissions & devices so preview can show on the overlay.
     rec.ensurePermission().catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 🔁 Attach the stream to whichever surface is visible
   useEffect(() => {
-    rec.attach(mediaEl.current);
-  }, [mediaEl.current]); // eslint-disable-line react-hooks/exhaustive-deps
+    const el = overlay.show ? overlayMediaRef.current : mainMediaRef.current;
+    if (el) rec.attach(el);
+  }, [overlay.show, preferredKind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(currentPlayer)));
@@ -82,6 +90,8 @@ export default function Play() {
   function startTurn(next: 'p1' | 'p2') {
     setCurrentPlayer(next);
     setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(next)));
+    // when recording starts, main card becomes active surface
+    if (mainMediaRef.current) rec.attach(mainMediaRef.current);
     rec.start();
   }
 
@@ -115,11 +125,12 @@ export default function Play() {
     const pair = [...lastPair, meta];
     if (pair.length === 2 && pair.some((m) => m.playerId === 'p1') && pair.some((m) => m.playerId === 'p2')) {
       setLastPair([]);
-      setShowSummary(true); // user now dismisses using Continue
+      setShowSummary(true); // stays until Continue
     } else {
       setLastPair(pair);
-      // show ready overlay for next player
       setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
+      // when overlay opens, move preview to overlay surface
+      if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
     }
   }
 
@@ -162,9 +173,9 @@ export default function Play() {
           {rec.permission !== 'granted' ? (
             <div>Allow camera/microphone to play.</div>
           ) : preferredKind === 'video' ? (
-            <video ref={mediaEl as any} autoPlay muted playsInline />
+            <video ref={mainMediaRef as any} autoPlay muted playsInline />
           ) : (
-            <audio ref={mediaEl as any} autoPlay />
+            <audio ref={mainMediaRef as any} autoPlay />
           )}
         </div>
       </div>
@@ -177,9 +188,9 @@ export default function Play() {
 
             <div className="card" style={{ background: '#0b1220', borderRadius: 12, padding: 12 }}>
               {preferredKind === 'video' ? (
-                <video ref={mediaEl as any} autoPlay muted playsInline style={{ width: '100%', borderRadius: 8 }} />
+                <video ref={overlayMediaRef as any} autoPlay muted playsInline style={{ width: '100%', borderRadius: 8 }} />
               ) : (
-                <audio ref={mediaEl as any} autoPlay />
+                <audio ref={overlayMediaRef as any} autoPlay />
               )}
             </div>
 
@@ -216,6 +227,7 @@ export default function Play() {
             setOverlay({ show: true, next: 'p1', mode: 'ready', count: 3 });
             setCurrentPlayer('p1');
             setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker('p1')));
+            if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
           }}
           onNewGame={() => {
             resetGame();
@@ -230,9 +242,9 @@ export default function Play() {
           onEndGame={() => setEndOpen(true)}
           onContinue={() => {
             setShowSummary(false);
-            // after summary, go to ready overlay for the other player
             const other: 'p1' | 'p2' = currentPlayer === 'p1' ? 'p2' : 'p1';
             setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
+            if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
           }}
         />
       )}
@@ -348,3 +360,4 @@ function EndGameOverlay({
     </div>
   );
 }
+
