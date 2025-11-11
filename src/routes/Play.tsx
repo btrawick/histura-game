@@ -127,12 +127,20 @@ export default function Play() {
           <div className="label">Kind</div>
           <KindToggle onVideoClick={() => rec.cycleCamera()} />
         </div>
-        <div style={{ marginTop: 16 }}>
-          {preferredKind === 'video'
-            ? <video ref={mainMediaRef as any} autoPlay muted playsInline />
-            : <audio ref={mainMediaRef as any} autoPlay />
-          }
+               <div style={{ marginTop: 16 }}>
+          {preferredKind === 'video' ? (
+            <video
+              ref={mainMediaRef as any}
+              autoPlay
+              muted
+              playsInline
+              style={{ width: '100%', borderRadius: 8 }}
+            />
+          ) : (
+            <audio ref={mainMediaRef as any} autoPlay />
+          )}
         </div>
+
       </div>
 
       {overlay.show && (
