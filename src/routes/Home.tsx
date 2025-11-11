@@ -13,11 +13,13 @@ export default function Home() {
   useEffect(() => setRel(relationship), [relationship]);
 
   const labels = sideLabels[rel];
+  const toTitle = (s?: string) => (s ? s.slice(0,1).toUpperCase() + s.slice(1) : '');
 
   return (
     <div className="container">
       <h1>Home</h1>
 
+      {/* Relationship selector */}
       <div className="card" style={{ display: 'grid', gap: 8 }}>
         <div className="label">Relationship Mode</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
@@ -37,6 +39,7 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Players */}
       <div
         className="card"
         style={{
@@ -57,8 +60,9 @@ export default function Home() {
             style={{ width: '100%' }}
           />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 8, alignItems: 'center' }}>
-            <select value={labels.p1} disabled>
-              <option>{labels.p1}</option>
+            {/* role reflects the player's current role (updates on swap) */}
+            <select value={toTitle(players.p1.role)} disabled>
+              <option>{toTitle(players.p1.role)}</option>
             </select>
             <AvatarPreview
               name={players.p1.name || labels.p1}
@@ -79,8 +83,8 @@ export default function Home() {
             style={{ width: '100%' }}
           />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 8, alignItems: 'center' }}>
-            <select value={labels.p2} disabled>
-              <option>{labels.p2}</option>
+            <select value={toTitle(players.p2.role)} disabled>
+              <option>{toTitle(players.p2.role)}</option>
             </select>
             <AvatarPreview
               name={players.p2.name || labels.p2}
@@ -90,9 +94,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Actions row: Swap + Play */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+        {/* Actions row: Swap (left) + centered Play */}
+        <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}>
+          <div>
             <button className="button secondary" onClick={swapPlayers} title="Swap players (including roles)">
               Swap players
             </button>
@@ -105,9 +109,11 @@ export default function Home() {
               navigate('/play');
             }}
             title="Start a fresh game"
+            style={{ justifySelf: 'center' }}
           >
             ▶ Play
           </button>
+          <div /> {/* right spacer to keep Play centered */}
         </div>
       </div>
 
@@ -115,10 +121,7 @@ export default function Home() {
         <AvatarCapture
           onCancel={() => setCaptureFor(null)}
           onSave={(dataUrl) => {
-            // persist avatar to the chosen player
-            // (keeps name/role/score intact)
-            const id = captureFor;
-            setPlayer(id, { avatarDataUrl: dataUrl });
+            setPlayer(captureFor, { avatarDataUrl: dataUrl });
             setCaptureFor(null);
           }}
         />
@@ -128,16 +131,9 @@ export default function Home() {
 }
 
 function AvatarPreview({
-  name,
-  dataUrl,
-  onClick,
-}: {
-  name: string;
-  dataUrl?: string;
-  onClick?: () => void;
-}) {
-  const src =
-    dataUrl || `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(name || 'player')}`;
+  name, dataUrl, onClick,
+}: { name: string; dataUrl?: string; onClick?: () => void }) {
+  const src = dataUrl || `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(name || 'player')}`;
   return (
     <img
       src={src}
