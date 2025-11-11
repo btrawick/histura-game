@@ -1,6 +1,7 @@
 // src/lib/store.ts
 import { create } from 'zustand';
-import { Player, SavedRecording, GameSession, Relationship } from '@/types';
+import type { Player, SavedRecording, GameSession, Relationship } from '@/types';
+export type { Relationship } from '@/types'; // re-export for compatibility;
 
 export const sideLabels: Record<Relationship, { p1: string; p2: string }> = {
   'kid-parent': { p1: 'Kid', p2: 'Parent' },
