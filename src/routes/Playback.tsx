@@ -1,18 +1,22 @@
 // src/routes/Playback.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGame } from '@/lib/store';
 import { exportGameZip } from '@/lib/export';
 import { questions } from '@/lib/questions-relations';
+import { getBlob } from '@/lib/storage';
+import type { SavedRecording } from '@/types';
 
 export default function Playback() {
   const { recordings, games } = useGame();
+
   const byGame = useMemo(() => {
-    const map = new Map<string, typeof recordings>();
+    const map = new Map<string, SavedRecording[]>();
     recordings.forEach((r) => {
       const list = map.get(r.meta.gameId) || [];
       list.push(r);
       map.set(r.meta.gameId, list);
     });
+    // newest games first (recordings already newest-first)
     return Array.from(map.entries()).map(([gameId, recs]) => ({ gameId, recs }));
   }, [recordings]);
 
@@ -39,31 +43,33 @@ export default function Playback() {
                 <div className="label">{started}</div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{title}</div>
               </div>
-              <button
-                className="button"
-                disabled={busy === gameId}
-                onClick={async () => {
-                  setBusy(gameId);
-                  try { await exportGameZip(gameId, recs, title); } finally { setBusy(null); }
-                }}
-                title="Export recordings from this game as a ZIP"
-              >
-                {busy === gameId ? 'Exporting…' : 'Export ZIP'}
-              </button>
+              {g && (
+                <button
+                  className="button"
+                  disabled={busy === gameId}
+                  onClick={async () => {
+                    setBusy(gameId);
+                    try {
+                      await exportGameZip(g, recs);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                  title="Export recordings from this game as a ZIP"
+                >
+                  {busy === gameId ? 'Exporting…' : 'Export ZIP'}
+                </button>
+              )}
             </div>
 
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+            <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
               {recs.map((r) => {
                 const q = lookupQuestion(r.meta.questionId);
-                const who = r.meta.playerId === 'p1' ? 'P1' : 'P2';
-                const name = r.meta.playerId === 'p1' ? (g?.p1Name ?? 'Player 1') : (g?.p2Name ?? 'Player 2');
-                const label = `${name} — ${truncate(q?.text ?? r.meta.questionId, 60)}: ${r.meta.points} pts`;
+                const name = r.meta.playerId === 'p1' ? g?.p1Name ?? 'Player 1' : g?.p2Name ?? 'Player 2';
+                const label = `${name} — ${truncate(q?.text ?? r.meta.questionId, 60)} (${r.meta.points} pts)`;
+
                 return (
-                  <div key={r.meta.id} className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
-                    <div>{label}</div>
-                    <audio controls src={URL.createObjectURL(new Blob([], { type: r.meta.mimeType }))} style={{ display: r.meta.kind === 'audio' ? 'block' : 'none' }} />
-                    {r.meta.kind === 'video' && <div style={{ opacity: 0.7, fontSize: 12 }}>(video)</div>}
-                  </div>
+                  <PlaybackRow key={r.meta.id} rec={r} label={label} />
                 );
               })}
             </div>
@@ -72,6 +78,39 @@ export default function Playback() {
       })}
     </div>
   );
+}
+
+function PlaybackRow({ rec, label }: { rec: SavedRecording; label: string }) {
+  const url = useObjectURL(rec.blobKey);
+  return (
+    <div className="row" style={{ justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+      {rec.meta.kind === 'video' ? (
+        <video controls src={url ?? undefined} style={{ maxWidth: 240, borderRadius: 8 }} />
+      ) : (
+        <audio controls src={url ?? undefined} />
+      )}
+    </div>
+  );
+}
+
+function useObjectURL(key: string) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const b = await getBlob(key);
+      if (!mounted || !b) return;
+      const u = URL.createObjectURL(b);
+      setUrl(u);
+    })();
+    return () => {
+      mounted = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return url;
 }
 
 function truncate(s: string, n: number) { return s.length <= n ? s : s.slice(0, n - 1) + '…'; }
@@ -85,9 +124,7 @@ function labelFor(rel: string) {
   }
 }
 
-// quick lookup by id
 function lookupQuestion(id: string) {
-  // questions: Record<rel, {p1:[], p2:[]}>
   for (const rel of Object.keys(questions) as Array<keyof typeof questions>) {
     for (const side of ['p1', 'p2'] as const) {
       const found = questions[rel][side].find((q) => q.id === id);
