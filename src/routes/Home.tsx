@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { relationship, setRelationship, players, setPlayer, resetScores } = useGame();
+  const { relationship, setRelationship, players, setPlayer, resetScores, swapPlayers } = useGame();
   const [rel, setRel] = useState<Relationship>(relationship);
 
   useEffect(() => setRel(relationship), [relationship]);
@@ -16,46 +16,27 @@ export default function Home() {
     <div className="container">
       <h1>Home</h1>
 
-      {/* Top row: Relationship + Play */}
-      <div className="card" style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
-          <div>
-            <div className="label">Relationship Mode</div>
-            <select
-              value={rel}
-              onChange={(e) => setRel(e.target.value as Relationship)}
-              style={{ marginTop: 8, width: '100%', fontSize: 16, padding: '10px 12px' }}
-            >
-              <option value="kid-parent">Kid ↔ Parent</option>
-              <option value="adultchild-parent">Adult Child ↔ Parent</option>
-              <option value="friend-friend">Friend ↔ Friend</option>
-              <option value="kid-grandparent">Kid ↔ Grandparent</option>
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="button" onClick={() => setRelationship(rel)} title="Apply selected relationship">
-              Apply
-            </button>
-            <button
-              className="button"
-              onClick={() => {
-                // ensure relationship applied, reset scores, then go play
-                setRelationship(rel);
-                resetScores();
-                navigate('/play');
-              }}
-              title="Start a fresh game"
-            >
-              ▶ Play
-            </button>
-          </div>
+      {/* Relationship selector (lean) */}
+      <div className="card" style={{ display: 'grid', gap: 8 }}>
+        <div className="label">Relationship Mode</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
+          <select
+            value={rel}
+            onChange={(e) => setRel(e.target.value as Relationship)}
+            style={{ width: '100%', fontSize: 16, padding: '10px 12px' }}
+          >
+            <option value="kid-parent">Kid ↔ Parent</option>
+            <option value="adultchild-parent">Adult Child ↔ Parent</option>
+            <option value="friend-friend">Friend ↔ Friend</option>
+            <option value="kid-grandparent">Kid ↔ Grandparent</option>
+          </select>
+          <button className="button" onClick={() => setRelationship(rel)} title="Apply selected relationship">
+            Apply
+          </button>
         </div>
-        <p style={{ opacity: 0.8, marginTop: -4 }}>
-          Prompts match the relationship. In <b>Play</b>, “Next up (answering)” is the person being recorded.
-        </p>
       </div>
 
-      {/* Players row: tidy proportions, consistent widths */}
+      {/* Players section with Play button placed here */}
       <div
         className="card"
         style={{
@@ -65,7 +46,7 @@ export default function Home() {
           gap: 16,
         }}
       >
-        {/* Player 1 card */}
+        {/* Player 1 */}
         <div style={{ display: 'grid', gap: 8 }}>
           <div className="label">Player 1</div>
           <input
@@ -83,7 +64,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Player 2 card */}
+        {/* Player 2 */}
         <div style={{ display: 'grid', gap: 8 }}>
           <div className="label">Player 2</div>
           <input
@@ -101,23 +82,25 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Actions row */}
+        {/* Actions row: Swap + Play */}
         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-          <button
-            className="button secondary"
-            onClick={() => {
-              // swap P1 and P2 names/avatars
-              const p1 = players.p1;
-              const p2 = players.p2;
-              setPlayer('p1', { name: p2.name, avatarDataUrl: p2.avatarDataUrl });
-              setPlayer('p2', { name: p1.name, avatarDataUrl: p1.avatarDataUrl });
-            }}
-          >
-            Swap players
-          </button>
-          <div style={{ opacity: 0.75, alignSelf: 'center' }}>
-            Roles follow the selected relationship and are shown read-only here.
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="button secondary" onClick={swapPlayers} title="Swap players (including roles)">
+              Swap players
+            </button>
           </div>
+          <button
+            className="button"
+            onClick={() => {
+              // apply relationship, reset scores, and go Play
+              setRelationship(rel);
+              resetScores();
+              navigate('/play');
+            }}
+            title="Start a fresh game"
+          >
+            ▶ Play
+          </button>
         </div>
       </div>
     </div>
@@ -137,4 +120,5 @@ function AvatarPreview({ name, dataUrl }: { name: string; dataUrl?: string }) {
     />
   );
 }
+
 
