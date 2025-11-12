@@ -1,4 +1,3 @@
-// replaces the current file you have from earlier
 import { useGame } from '@/lib/store';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -12,28 +11,39 @@ export default function Settings() {
     <div className="container">
       <h1>Settings</h1>
 
+      {/* Appearance */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="label">Recording Mode</div>
+        <div className="label">Appearance</div>
+        <div style={{ marginTop: 8 }}>
+          <ThemeToggle />
+        </div>
+      </div>
+
+      {/* Recording Mode (still useful as a default; camera switch stays in the ready overlay) */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="label">Default Recording Mode</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <button
             className={`button ${kind === 'video' ? '' : 'secondary'}`}
             onClick={() => setKind('video')}
-            title="Click again (when on Video) to switch camera"
+            title="Use camera + microphone by default"
           >
             Video
           </button>
           <button
             className={`button ${kind === 'audio' ? '' : 'secondary'}`}
             onClick={() => setKind('audio')}
+            title="Use microphone only by default"
           >
             Audio
           </button>
         </div>
         <p style={{ opacity: 0.8, marginTop: 8 }}>
-          Tip: In <b>Play</b>, clicking the Video button again switches cameras (if your device has more than one).
+          Tip: In <b>Play</b>, you can still switch cameras from the ready popup when using Video.
         </p>
       </div>
 
+      {/* Stars timing scale */}
       <div className="card">
         <div className="label">Stars Timing</div>
         <div style={{ marginTop: 8 }}>
@@ -53,7 +63,7 @@ export default function Settings() {
           </div>
         </div>
         <p style={{ opacity: 0.9, marginTop: 8 }}>
-          This scales the time thresholds (base: 30/45/60/90s). Example: 0.8× gives stars sooner; 1.5× slows them down.
+          Scales the base thresholds (30/45/60/90s). Example: 0.8× gives stars sooner; 1.5× slows them down.
         </p>
       </div>
     </div>
