@@ -1,5 +1,6 @@
 // replaces the current file you have from earlier
 import { useGame } from '@/lib/store';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function Settings() {
   const kind = useGame((s) => s.preferredKind);
