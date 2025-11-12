@@ -1,0 +1,57 @@
+/* src/styles/theme.css */
+
+:root[data-theme="dark"] {
+  --bg: #0a0f1a;
+  --card: #0f1728;
+  --text: #e6ebff;
+  --muted: #9fb0d3;
+  --btn: #1b2a4a;
+  --btn-text: #e6ebff;
+  --btn-alt: #263a62;
+  --border: rgba(255,255,255,0.08);
+  --overlay: rgba(0,0,0,0.55);
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f9ff;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #53627d;
+  --btn: #e7edff;
+  --btn-text: #172033;
+  --btn-alt: #eef3ff;
+  --border: rgba(0,0,0,0.08);
+  --overlay: rgba(0,0,0,0.35);
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container { color: var(--text); }
+
+.card, .overlay-card {
+  background: var(--card) !important;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.label { color: var(--muted); }
+
+.button {
+  background: var(--btn);
+  color: var(--btn-text);
+  border: 1px solid var(--border);
+}
+
+.button.secondary { background: var(--btn-alt); }
+.button.ghost { background: transparent; }
+
+select, input {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.overlay { background: var(--overlay); }
