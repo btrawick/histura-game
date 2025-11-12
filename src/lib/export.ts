@@ -34,6 +34,27 @@ export async function exportGameZip(game: GameSession, recs: SavedRecording[]) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+// add this helper (keep the existing exportGameZip function you already have)
+export async function exportGameZipBuildBlob(game: GameSession, recs: SavedRecording[]) {
+  const zip = new JSZip();
+  const folderName = `(${safe(game.p1Name)}_vs_${safe(game.p2Name)}_${fmtDate(game.startedAt)})`;
+  const folder = zip.folder(folderName) || zip;
+
+  for (const r of recs) {
+    const blob = await getBlob(r.blobKey);
+    if (!blob) continue;
+    const q = lookupQuestion(r.meta.questionId)?.text ?? r.meta.questionId;
+    const playerName = r.meta.playerId === 'p1' ? game.p1Name : game.p2Name;
+    const base = `${playerName} — ${truncate(q, 60)}`;
+    const ext = guessExt(r.meta.mimeType) || 'webm';
+    const fname = `${safe(base)}.${ext}`;
+    folder.file(fname, blob);
+  }
+
+  const out = await zip.generateAsync({ type: 'blob' });
+  const filename = `${folderName}.zip`;
+  return { blob: out, filename };
+}
 
 function lookupQuestion(id: string) {
   for (const rel of Object.keys(questions) as Array<keyof typeof questions>) {
