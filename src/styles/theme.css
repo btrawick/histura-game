@@ -10,6 +10,10 @@
   --btn-alt: #263a62;
   --border: rgba(255,255,255,0.08);
   --overlay: rgba(0,0,0,0.55);
+
+  /* NEW: header colors */
+  --header-bg: #0f1728;
+  --header-text: #e6ebff;
 }
 
 :root[data-theme="light"] {
@@ -22,6 +26,10 @@
   --btn-alt: #eef3ff;
   --border: rgba(0,0,0,0.08);
   --overlay: rgba(0,0,0,0.35);
+
+  /* NEW: header colors */
+  --header-bg: #ffffff;
+  --header-text: #172033;
 }
 
 html, body {
@@ -55,3 +63,21 @@ select, input {
 }
 
 .overlay { background: var(--overlay); }
+
+/* NEW: header styling — applies to common header containers */
+header, .app-header, .topbar, .navbar {
+  background: var(--header-bg);
+  color: var(--header-text);
+  border-bottom: 1px solid var(--border);
+}
+
+/* make sure links/buttons in header inherit good contrast */
+header a, .app-header a, .topbar a, .navbar a {
+  color: var(--header-text);
+}
+
+header .button, .app-header .button, .topbar .button, .navbar .button {
+  background: var(--btn);
+  color: var(--btn-text);
+  border: 1px solid var(--border);
+}
