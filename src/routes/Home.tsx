@@ -100,18 +100,18 @@ export default function Home() {
             </button>
           </div>
           <button
-            className="button"
-            onClick={() => {
-              setRelationship(rel);
-              resetScores();
-              startNewGame();
-              navigate('/play');
-            }}
-            title="Start a fresh game"
-            style={{ justifySelf: 'center' }}
-          >
-            ▶ Play
-          </button>
+  className="button"
+  onClick={() => {
+    setRelationship(rel);
+    resetScores();
+    startNewGame();
+    navigate('/play');
+  }}
+  title="Start a fresh game"
+  style={{ justifySelf: 'center' }}
+>
+  ▶ Play
+</button>
           <div />
         </div>
       </div>
