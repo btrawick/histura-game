@@ -1,12 +1,18 @@
+// src/App.tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Home from '@/routes/Home';
 import Play from '@/routes/Play';
 import Playback from '@/routes/Playback';
 import Settings from '@/routes/Settings';
+import NavTabs from '@/components/NavTabs';
 
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Top tabs menu */}
+      <NavTabs />
+
+      {/* Main content area */}
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 12px 48px' }}>
         <Routes>
           <Route path="/" element={<Home />} />
