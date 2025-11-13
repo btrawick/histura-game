@@ -100,7 +100,7 @@ export default function Home() {
             </button>
           </div>
           <button
-  className="button"
+  className="button play"
   onClick={() => {
     setRelationship(rel);
     resetScores();
@@ -108,7 +108,7 @@ export default function Home() {
     navigate('/play');
   }}
   title="Start a fresh game"
-  style={{ justifySelf: 'center' }}
+  style={{ justifySelf: 'center', minWidth: 140 }}
 >
   ▶ Play
 </button>
