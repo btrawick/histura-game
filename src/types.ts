@@ -1,5 +1,11 @@
 // src/types.ts
-export type Relationship = 'kid-parent' | 'adultchild-parent' | 'friend-friend' | 'kid-grandparent';
+export type Relationship =
+  | 'kid-parent'
+  | 'adultchild-parent'
+  | 'friend-friend'
+  | 'kid-grandparent'
+  | 'kid-kid'
+  | 'sibling-sibling';
 
 export interface Player {
   id: 'p1' | 'p2';
@@ -12,7 +18,7 @@ export interface Player {
 export interface SavedRecording {
   meta: {
     id: string;
-    gameId: string;          // which game this belongs to
+    gameId: string;
     playerId: 'p1' | 'p2';
     questionId: string;
     category: string;
@@ -23,7 +29,7 @@ export interface SavedRecording {
     kind: 'audio' | 'video';
     mimeType: string;
   };
-  blobKey: string;           // key in IndexedDB
+  blobKey: string;
 }
 
 export interface GameSession {
