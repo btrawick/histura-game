@@ -1,3 +1,4 @@
+// src/lib/export.ts
 import JSZip from 'jszip';
 import { getBlob } from '@/lib/storage';
 import { questions } from '@/lib/questions-relations';
@@ -16,7 +17,6 @@ export async function exportGameZip(game: GameSession, recs: SavedRecording[]) {
   URL.revokeObjectURL(url);
 }
 
-// Build the ZIP blob (used by both Download + Web Share)
 export async function exportGameZipBuildBlob(game: GameSession, recs: SavedRecording[]) {
   const zip = new JSZip();
 
@@ -30,7 +30,7 @@ export async function exportGameZipBuildBlob(game: GameSession, recs: SavedRecor
     const q = lookupQuestion(r.meta.questionId)?.text ?? r.meta.questionId;
     const playerName = r.meta.playerId === 'p1' ? game.p1Name : game.p2Name;
 
-    const base = `${playerName} — ${truncate(q, 60)}`; // Name — truncated question
+    const base = `${playerName} — ${truncate(q, 60)}`;
     const ext = guessExt(r.meta.mimeType) || 'webm';
     const fname = `${safe(base)}.${ext}`;
 
