@@ -1,5 +1,6 @@
 // src/lib/questions-relations.ts
 import type { Relationship } from '@/types';
+import { extraQuestions } from '@/lib/questions-newpairs';
 
 export type RelationSide = 'p1' | 'p2'
 export interface RelationQuestion { id: string; text: string; bucket: string }
@@ -318,6 +319,7 @@ const raw: RawAll = {
 }
 
 export const questions = bake(raw)
+Object.assign(questions as any, extraQuestions);
 
 export function getRandomQuestionFor(rel: Relationship, side: RelationSide): RelationQuestion {
   const pool = questions[rel][side]
