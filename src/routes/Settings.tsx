@@ -1,5 +1,5 @@
-// src/routes/Settings.tsx
 import { useGame } from '@/lib/store';
+import ThemeSwitch from '@/components/ThemeSwitch';
 
 export default function Settings() {
   const kind = useGame((s) => s.preferredKind);
@@ -11,6 +11,15 @@ export default function Settings() {
     <div className="container">
       <h1>Settings</h1>
 
+      {/* Appearance */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="label">Appearance</div>
+        <div style={{ marginTop: 8 }}>
+          <ThemeSwitch />
+        </div>
+      </div>
+
+      {/* Default Recording Mode */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="label">Default Recording Mode</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -34,6 +43,7 @@ export default function Settings() {
         </p>
       </div>
 
+      {/* Stars timing scale */}
       <div className="card">
         <div className="label">Stars Timing</div>
         <div style={{ marginTop: 8 }}>
@@ -56,4 +66,3 @@ export default function Settings() {
     </div>
   );
 }
-
