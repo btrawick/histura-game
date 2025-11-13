@@ -26,7 +26,7 @@ export default function AvatarCapture({
         }
         setStream(s);
         if (videoRef.current) (videoRef.current as any).srcObject = s;
-      } catch (e) {
+      } catch {
         setError('Cannot access camera.');
       }
     })();
@@ -44,7 +44,6 @@ export default function AvatarCapture({
     canvas.width = 512;
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
-    // center-crop to square
     const sx = (video.videoWidth - size) / 2;
     const sy = (video.videoHeight - size) / 2;
     ctx.drawImage(video, sx, sy, size, size, 0, 0, 512, 512);
@@ -67,19 +66,10 @@ export default function AvatarCapture({
           <button className="button" onClick={takeSnapshot} disabled={!stream}>
             Capture
           </button>
-          <button
-            className="button secondary"
-            onClick={() => {
-              onCancel();
-            }}
-          >
-            Cancel
-          </button>
+          <button className="button secondary" onClick={onCancel}>Cancel</button>
         </div>
-        <p style={{ opacity: 0.7, marginTop: 8, fontSize: 12 }}>
-          Tip: Hold the device at arm’s length, good light, then tap <b>Capture</b>.
-        </p>
       </div>
     </div>
   );
 }
+
