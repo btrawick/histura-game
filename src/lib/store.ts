@@ -3,7 +3,6 @@ import { create } from 'zustand';
 import type { Player, SavedRecording, GameSession, Relationship } from '@/types';
 export type { Relationship } from '@/types';
 
-export type ThemeMode = 'dark' | 'light';
 export type Kind = 'audio' | 'video';
 
 export const sideLabels: Record<Relationship, { p1: string; p2: string }> = {
@@ -14,30 +13,23 @@ export const sideLabels: Record<Relationship, { p1: string; p2: string }> = {
 };
 
 interface GameState {
-  // core game
   relationship: Relationship;
   players: { p1: Player; p2: Player };
   preferredKind: Kind;
   recordings: SavedRecording[];
   highScore: number;
 
-  // stars timing scale
   starScale: number;
   setStarScale: (n: number) => void;
 
-  // games grouping
   currentGameId: string;
   games: GameSession[];
   startNewGame: () => void;
 
-  // theme
-  theme: ThemeMode;
-  setTheme: (mode: ThemeMode) => void;
-
-  // mutators
   setRelationship: (r: Relationship) => void;
   setPlayer: (id: 'p1' | 'p2', patch: Partial<Player>) => void;
   swapPlayers: () => void;
+
   addScore: (id: 'p1' | 'p2', delta: number) => void;
   setPreferredKind: (k: Kind) => void;
   addRecording: (rec: SavedRecording) => void;
@@ -64,19 +56,6 @@ export const useGame = create<GameState>((set, get) => {
     p1Name: sideLabels[rel].p1,
     p2Name: sideLabels[rel].p2,
   };
-
-  // resolve initial theme
-  const initTheme = (() => {
-    const saved = (typeof localStorage !== 'undefined' && (localStorage.getItem('histura_theme') as ThemeMode | null)) || null;
-    if (saved === 'dark' || saved === 'light') return saved;
-    const prefersDark = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    return prefersDark ? 'dark' : 'light';
-  })();
-
-  // ensure <html data-theme=...> is set
-  if (typeof document !== 'undefined') {
-    document.documentElement.setAttribute('data-theme', initTheme);
-  }
 
   return {
     relationship: rel,
@@ -111,14 +90,6 @@ export const useGame = create<GameState>((set, get) => {
             p2: { ...s.players.p2, score: 0 },
           },
         };
-      }),
-
-    theme: initTheme,
-    setTheme: (mode) =>
-      set(() => {
-        if (typeof localStorage !== 'undefined') localStorage.setItem('histura_theme', mode);
-        if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', mode);
-        return { theme: mode };
       }),
 
     setRelationship: (r) =>
@@ -175,3 +146,4 @@ export const useGame = create<GameState>((set, get) => {
       })),
   };
 });
+
