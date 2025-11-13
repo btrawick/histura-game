@@ -10,6 +10,9 @@ export const sideLabels: Record<Relationship, { p1: string; p2: string }> = {
   'adultchild-parent': { p1: 'Adult Child', p2: 'Parent' },
   'friend-friend': { p1: 'Friend A', p2: 'Friend B' },
   'kid-grandparent': { p1: 'Kid', p2: 'Grandparent' },
+  // NEW
+  'kid-kid': { p1: 'Kid A', p2: 'Kid B' },
+  'sibling-sibling': { p1: 'Sibling A', p2: 'Sibling B' },
 };
 
 interface GameState {
