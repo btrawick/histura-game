@@ -144,3 +144,65 @@ input:focus, select:focus {
 .button.play:active {
   transform: scale(0.97);
 }
+
+/* ==== Light/Dark (non-breaking) ========================================== */
+/* Default (dark) is already defined above via literal colors.               */
+/* We only override colors when data-theme="light" is present on <html>.     */
+
+:root[data-theme="light"] body {
+  background: #f7f9ff;
+  color: #172033;
+}
+
+/* Cards, rows, containers */
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .overlay-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+  color: #172033;
+}
+:root[data-theme="light"] .container { color: #172033; }
+
+/* Labels */
+:root[data-theme="light"] .label { color: #53627d; }
+
+/* Buttons */
+:root[data-theme="light"] .button {
+  background: #e7edff;
+  color: #172033;
+  border-color: rgba(0,0,0,0.08);
+}
+:root[data-theme="light"] .button.secondary { background: #eef3ff; }
+:root[data-theme="light"] .button.ghost {
+  background: transparent;
+  border-color: rgba(0,0,0,0.12);
+}
+
+/* Inputs */
+:root[data-theme="light"] input,
+:root[data-theme="light"] select {
+  background: #ffffff;
+  color: #172033;
+  border-color: rgba(0,0,0,0.12);
+}
+
+/* Overlay backdrop */
+:root[data-theme="light"] .overlay { background: rgba(0,0,0,0.35); }
+
+/* Tabs (top nav) */
+:root[data-theme="light"] .tabs {
+  background: #ffffff;
+  border-bottom-color: rgba(0,0,0,0.08);
+}
+:root[data-theme="light"] .tab { color: #172033; }
+:root[data-theme="light"] .tab.active {
+  background: #eef3ff;
+  border-color: rgba(0,0,0,0.10);
+}
+
+/* Keep the prominent Play button bright in light mode */
+:root[data-theme="light"] .button.play {
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+}
+
