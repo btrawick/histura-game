@@ -1,3 +1,4 @@
+// src/routes/Play.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGame } from '@/lib/store';
@@ -10,8 +11,6 @@ import type { SavedRecording } from '@/types';
 import { getRandomQuestionFor } from '@/lib/questions-relations';
 
 type OverlayMode = 'ready' | 'countdown';
-
-// When a player is answering, pull a prompt tailored to them (opposite side list).
 const promptSideForSpeaker = (speaker: 'p1' | 'p2'): 'p1' | 'p2' => (speaker === 'p1' ? 'p2' : 'p1');
 
 export default function Play() {
@@ -35,7 +34,6 @@ export default function Play() {
   );
   const rec = useRecorder(preferredKind);
 
-  // Two distinct media elements to avoid ref races
   const mainMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const overlayMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
@@ -51,18 +49,15 @@ export default function Play() {
   const [showSummary, setShowSummary] = useState(false);
   const [confetti, setConfetti] = useState(0);
 
-  // Warm up permissions so overlay preview can show
   useEffect(() => {
     rec.ensurePermission().catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // warm up
 
-  // Attach the stream to the visible surface
   useEffect(() => {
     const el = overlay.show ? overlayMediaRef.current : mainMediaRef.current;
     if (el) rec.attach(el);
-  }, [overlay.show, preferredKind]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [overlay.show, preferredKind]); // attach to visible surface
 
-  // Update prompt when relationship or current player changes
   useEffect(() => {
     setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(currentPlayer)));
   }, [relationship, currentPlayer]);
@@ -72,7 +67,6 @@ export default function Play() {
     setTimeout(() => setConfetti((n) => n - 1), 1200);
   }
 
-  // 3-2-1 countdown (1s each)
   function beginCountdown(next: 'p1' | 'p2') {
     setOverlay({ show: true, next, mode: 'countdown', count: 3 });
     let c = 3;
@@ -90,7 +84,6 @@ export default function Play() {
   function startTurn(next: 'p1' | 'p2') {
     setCurrentPlayer(next);
     setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(next)));
-    // when recording starts, main card becomes active surface
     if (mainMediaRef.current) rec.attach(mainMediaRef.current);
     rec.start();
   }
@@ -124,12 +117,9 @@ export default function Play() {
     if (points + players[currentPlayer].score > prevHigh) triggerConfetti();
 
     const pair = [...lastPair, meta];
-    const bothAnswered =
-      pair.length === 2 && pair.some((m) => m.playerId === 'p1') && pair.some((m) => m.playerId === 'p2');
-
-    if (bothAnswered) {
+    if (pair.length === 2 && pair.some((m) => m.playerId === 'p1') && pair.some((m) => m.playerId === 'p2')) {
       setLastPair([]);
-      setShowSummary(true); // user decides Continue or End Game
+      setShowSummary(true);
     } else {
       setLastPair(pair);
       setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
@@ -140,7 +130,6 @@ export default function Play() {
   return (
     <div className="container">
       {confetti > 0 && <div className="confetti">🎉✨🎊</div>}
-
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1>Play</h1>
         <button className="button secondary" onClick={() => setEndOpen(true)} title="Finish or reset the game">
@@ -170,7 +159,6 @@ export default function Play() {
         <TimerAndStars sec={rec.elapsed} />
         <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
           <RecordButton recording={rec.recording} onStart={rec.start} onStop={handleStop} />
-          {/* Kind toggle removed from main card */}
         </div>
         <div style={{ marginTop: 16 }}>
           {preferredKind === 'video' ? (
@@ -213,15 +201,10 @@ export default function Play() {
                   Switch camera
                 </button>
               )}
-              {/* Small kind toggle removed; camera switch remains */}
             </div>
 
             {overlay.mode === 'ready' ? (
-              <button
-                className="button"
-                style={{ marginTop: 12 }}
-                onClick={() => beginCountdown(overlay.next)}
-              >
+              <button className="button" style={{ marginTop: 12 }} onClick={() => beginCountdown(overlay.next)}>
                 Start
               </button>
             ) : (
@@ -234,10 +217,7 @@ export default function Play() {
       {endOpen && (
         <EndGameOverlay
           onClose={() => setEndOpen(false)}
-          onFinish={() => {
-            setEndOpen(false);
-            navigate('/playback');
-          }}
+          onFinish={() => { setEndOpen(false); navigate('/playback'); }}
           onRematch={() => {
             resetScores();
             setEndOpen(false);
@@ -246,20 +226,13 @@ export default function Play() {
             setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker('p1')));
             if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
           }}
-          onNewGame={() => {
-            resetGame();
-            setEndOpen(false);
-            navigate('/');
-          }}
+          onNewGame={() => { resetGame(); setEndOpen(false); navigate('/'); }}
         />
       )}
 
       {showSummary && (
         <RoundSummary
-          onEndGame={() => {
-            setShowSummary(false);
-            setEndOpen(true);
-          }}
+          onEndGame={() => { setShowSummary(false); setEndOpen(true); }}
           onContinue={() => {
             setShowSummary(false);
             const other: 'p1' | 'p2' = currentPlayer === 'p1' ? 'p2' : 'p1';
@@ -271,10 +244,6 @@ export default function Play() {
     </div>
   );
 }
-
-/* ────────────────────────────────────────────── */
-/* Inline components */
-/* ────────────────────────────────────────────── */
 
 function RoundSummary({ onEndGame, onContinue }: { onEndGame: () => void; onContinue: () => void }) {
   const { recordings, players } = useGame();
