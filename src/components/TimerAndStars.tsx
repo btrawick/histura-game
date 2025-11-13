@@ -4,7 +4,7 @@ import { pointsForDuration } from '@/lib/scoring';
 
 export default function TimerAndStars({ sec }: { sec: number }) {
   const starScale = useGame((s) => s.starScale);
-  const pts = pointsForDuration(sec, starScale); // 0..5
+  const pts = pointsForDuration(sec, starScale);
   const stars = Math.max(0, Math.min(5, pts));
 
   return (
