@@ -4,7 +4,7 @@ export type Relationship = 'kid-parent' | 'adultchild-parent' | 'friend-friend' 
 export interface Player {
   id: 'p1' | 'p2';
   name: string;
-  role: 'kid' | 'parent' | 'adult child' | 'friend a' | 'friend b' | 'grandparent' | string;
+  role: string; // e.g., 'kid', 'parent', etc.
   avatarDataUrl?: string;
   score: number;
 }
@@ -12,7 +12,7 @@ export interface Player {
 export interface SavedRecording {
   meta: {
     id: string;
-    gameId: string;          // NEW: which game this belongs to
+    gameId: string;          // which game this belongs to
     playerId: 'p1' | 'p2';
     questionId: string;
     category: string;
