@@ -7,14 +7,23 @@ import AvatarCapture from '@/components/AvatarCapture';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { relationship, setRelationship, players, setPlayer, resetScores, swapPlayers, startNewGame } = useGame();
+  const {
+    relationship,
+    setRelationship,
+    players,
+    setPlayer,
+    resetScores,
+    swapPlayers,
+    startNewGame,
+  } = useGame();
   const [rel, setRel] = useState<Relationship>(relationship);
   const [captureFor, setCaptureFor] = useState<null | 'p1' | 'p2'>(null);
 
   useEffect(() => setRel(relationship), [relationship]);
 
   const labels = sideLabels[rel];
-  const toTitle = (s?: string) => (s ? s.slice(0, 1).toUpperCase() + s.slice(1) : '');
+  const toTitle = (s?: string) =>
+    s ? s.slice(0, 1).toUpperCase() + s.slice(1) : '';
 
   return (
     <div className="container">
@@ -22,10 +31,22 @@ export default function Home() {
 
       <div className="card" style={{ display: 'grid', gap: 8 }}>
         <div className="label">Relationship Mode</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
           <select
             value={rel}
-            onChange={(e) => setRel(e.target.value as Relationship)}
+            onChange={(e) => {
+              const newRel = e.target.value as Relationship;
+              setRel(newRel);
+              // apply immediately so roles & default names update
+              setRelationship(newRel);
+            }}
             style={{ width: '100%', fontSize: 16, padding: '10px 12px' }}
           >
             <option value="kid-parent">Kid ↔ Parent</option>
@@ -36,6 +57,7 @@ export default function Home() {
             <option value="sibling-sibling">Adult Sibling ↔ Adult Sibling</option>
           </select>
 
+          {/* Apply is now basically redundant, but harmless to keep */}
           <button
             className="button"
             onClick={() => setRelationship(rel)}
@@ -66,7 +88,14 @@ export default function Home() {
             style={{ width: '100%' }}
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 8, alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 80px',
+              gap: 8,
+              alignItems: 'center',
+            }}
+          >
             <select value={toTitle(players.p1.role)} disabled>
               <option>{toTitle(players.p1.role)}</option>
             </select>
@@ -90,7 +119,14 @@ export default function Home() {
             style={{ width: '100%' }}
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 8, alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 80px',
+              gap: 8,
+              alignItems: 'center',
+            }}
+          >
             <select value={toTitle(players.p2.role)} disabled>
               <option>{toTitle(players.p2.role)}</option>
             </select>
@@ -164,7 +200,9 @@ function AvatarPreview({
 }) {
   const src =
     dataUrl ||
-    `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(name || 'player')}`;
+    `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(
+      name || 'player'
+    )}`;
 
   return (
     <img
@@ -180,7 +218,9 @@ function AvatarPreview({
         objectFit: 'cover',
         background: '#0b1220',
         cursor: onClick ? 'pointer' : 'default',
-        boxShadow: onClick ? '0 0 0 2px rgba(255,255,255,0.06)' : undefined,
+        boxShadow: onClick
+          ? '0 0 0 2px rgba(255,255,255,0.06)'
+          : undefined,
       }}
       title={onClick ? 'Click to take profile photo' : undefined}
     />
