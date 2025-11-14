@@ -67,6 +67,14 @@ export default function Play() {
     setTimeout(() => setConfetti((n) => n - 1), 1200);
   }
 
+  function closeOverlay() {
+  // Stop recording if somehow active
+  try { rec.stop(); } catch {}
+  // Hide overlay and return to Home
+  setOverlay((o) => ({ ...o, show: false }));
+  navigate('/');
+}
+
   function beginCountdown(next: 'p1' | 'p2') {
     setOverlay({ show: true, next, mode: 'countdown', count: 3 });
     let c = 3;
@@ -178,6 +186,30 @@ export default function Play() {
       {overlay.show && (
         <div className="overlay">
           <div className="overlay-card" style={{ width: 520, maxWidth: '95vw' }}>
+      {/* CLOSE BUTTON */}
+      <button
+        onClick={closeOverlay}
+        title="Cancel"
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          background: 'rgba(255,255,255,0.15)',
+          border: 'none',
+          color: '#fff',
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          cursor: 'pointer',
+          fontSize: 16,
+          fontWeight: 700,
+          lineHeight: '28px',
+          textAlign: 'center',
+        }}
+      >
+        ×
+      </button>
+            
             <div className="label">Next up (answering)</div>
             <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 8 }}>{players[overlay.next].name}</div>
 
