@@ -4,6 +4,7 @@ import { useGame } from '@/lib/store';
 import { exportGameZip } from '@/lib/export';
 import { questions } from '@/lib/questions-relations';
 import { getBlob, deleteBlob } from '@/lib/storage';
+import { tryShareGame } from '@/lib/share';
 import type { SavedRecording } from '@/types';
 
 export default function Playback() {
@@ -51,10 +52,11 @@ export default function Playback() {
               </div>
 
               {g && (
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {/* Delete Game */}
                   <button
                     className="button secondary"
-                    disabled={busy === `delete:${gameId}`}
+                    disabled={busy === `delete:${gameId}` || busy === `share:${gameId}` || busy === gameId}
                     onClick={async () => {
                       const ok = window.confirm(
                         'Are you sure? Deleting this game will remove its recordings.'
@@ -77,9 +79,36 @@ export default function Playback() {
                     {busy === `delete:${gameId}` ? 'Deleting…' : 'Delete Game'}
                   </button>
 
+                  {/* Share Game */}
+                  <button
+                    className="button secondary"
+                    disabled={busy === `share:${gameId}` || busy === `delete:${gameId}` || busy === gameId}
+                    onClick={async () => {
+                      setBusy(`share:${gameId}`);
+                      try {
+                        const ok = await tryShareGame(g, recs);
+                        if (!ok) {
+                          window.alert(
+                            'Sharing is not available on this device or browser. You can still use "Export ZIP" to save the files.'
+                          );
+                        }
+                      } catch {
+                        window.alert(
+                          'Something went wrong while trying to share. Please try again or use "Export ZIP".'
+                        );
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                    title="Share this game using your device share sheet"
+                  >
+                    {busy === `share:${gameId}` ? 'Sharing…' : 'Share'}
+                  </button>
+
+                  {/* Export ZIP */}
                   <button
                     className="button"
-                    disabled={busy === gameId}
+                    disabled={busy === gameId || busy === `share:${gameId}` || busy === `delete:${gameId}`}
                     onClick={async () => {
                       setBusy(gameId);
                       try {
