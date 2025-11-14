@@ -36,9 +36,24 @@ interface GameState {
   setPreferredKind: (k: Kind) => void;
   addRecording: (rec: SavedRecording) => void;
   removeRecording: (id: string) => void;
+  deleteGame: (gameId: string) => void;
+
   resetGame: () => void;
   resetScores: () => void;
 }
+
+type PersistedState = {
+  relationship: Relationship;
+  players: { p1: Player; p2: Player };
+  preferredKind: Kind;
+  recordings: SavedRecording[];
+  highScore: number;
+  starScale: number;
+  currentGameId: string;
+  games: GameSession[];
+};
+
+const STORAGE_KEY = 'histura-game-state-v1';
 
 const defaultPlayer = (id: 'p1' | 'p2', label: string): Player => ({
   id,
@@ -49,9 +64,22 @@ const defaultPlayer = (id: 'p1' | 'p2', label: string): Player => ({
 
 const newGameId = () => crypto.randomUUID();
 
+function loadPersisted(): PersistedState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedState;
+  } catch {
+    return null;
+  }
+}
+
 export const useGame = create<GameState>((set, get) => {
-  const rel: Relationship = 'kid-parent';
-  const initialGame: GameSession = {
+  const persisted = loadPersisted();
+  const rel: Relationship = persisted?.relationship ?? 'kid-parent';
+
+  const baseGame: GameSession = {
     id: newGameId(),
     startedAt: Date.now(),
     relationship: rel,
@@ -61,19 +89,27 @@ export const useGame = create<GameState>((set, get) => {
 
   return {
     relationship: rel,
-    players: {
-      p1: defaultPlayer('p1', sideLabels[rel].p1),
-      p2: defaultPlayer('p2', sideLabels[rel].p2),
-    },
-    preferredKind: 'video',
-    recordings: [],
-    highScore: 0,
+    players:
+      persisted?.players ??
+      {
+        p1: defaultPlayer('p1', sideLabels[rel].p1),
+        p2: defaultPlayer('p2', sideLabels[rel].p2),
+      },
+    preferredKind: persisted?.preferredKind ?? 'video',
+    recordings: persisted?.recordings ?? [],
+    highScore: persisted?.highScore ?? 0,
 
-    starScale: 1,
+    starScale: persisted?.starScale ?? 1,
     setStarScale: (n) => set({ starScale: Math.min(2, Math.max(0.5, n)) }),
 
-    currentGameId: initialGame.id,
-    games: [initialGame],
+    games:
+      persisted?.games && persisted.games.length > 0 ? persisted.games : [baseGame],
+    currentGameId:
+      persisted?.currentGameId ??
+      (persisted?.games && persisted.games[0]
+        ? persisted.games[0].id
+        : baseGame.id),
+
     startNewGame: () =>
       set((s) => {
         const g: GameSession = {
@@ -110,7 +146,6 @@ export const useGame = create<GameState>((set, get) => {
             p1: {
               ...s.players.p1,
               role: newLabels.p1.toLowerCase(),
-              // if name was just the old default, update it to the new label
               name: p1NameIsDefault ? newLabels.p1 : s.players.p1.name,
             },
             p2: {
@@ -158,6 +193,40 @@ export const useGame = create<GameState>((set, get) => {
         recordings: s.recordings.filter((r) => r.meta.id !== rid),
       })),
 
+    deleteGame: (gameId: string) =>
+      set((s) => {
+        const remainingGames = s.games.filter((g) => g.id !== gameId);
+        const remainingRecs = s.recordings.filter(
+          (r) => r.meta.gameId !== gameId
+        );
+
+        let games = remainingGames;
+        let currentGameId = s.currentGameId;
+
+        if (s.currentGameId === gameId) {
+          if (remainingGames.length > 0) {
+            currentGameId = remainingGames[0].id;
+          } else {
+            const relNow = s.relationship;
+            const g: GameSession = {
+              id: newGameId(),
+              startedAt: Date.now(),
+              relationship: relNow,
+              p1Name: s.players.p1.name || sideLabels[relNow].p1,
+              p2Name: s.players.p2.name || sideLabels[relNow].p2,
+            };
+            games = [g];
+            currentGameId = g.id;
+          }
+        }
+
+        return {
+          games,
+          recordings: remainingRecs,
+          currentGameId,
+        };
+      }),
+
     resetGame: () =>
       set((s) => ({
         players: {
@@ -178,3 +247,24 @@ export const useGame = create<GameState>((set, get) => {
       })),
   };
 });
+
+// Persist to localStorage on every change (browser only)
+if (typeof window !== 'undefined') {
+  useGame.subscribe((state) => {
+    const toSave: PersistedState = {
+      relationship: state.relationship,
+      players: state.players,
+      preferredKind: state.preferredKind,
+      recordings: state.recordings,
+      highScore: state.highScore,
+      starScale: state.starScale,
+      currentGameId: state.currentGameId,
+      games: state.games,
+    };
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {
+      // ignore quota / private mode errors
+    }
+  });
+}
