@@ -150,7 +150,7 @@ export default function Home() {
         >
           <div>
             <button
-              className="button secondary"
+              className="button secondary swap"
               onClick={swapPlayers}
               title="Swap players (including roles)"
             >
