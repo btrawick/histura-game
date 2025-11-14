@@ -10,7 +10,6 @@ export const sideLabels: Record<Relationship, { p1: string; p2: string }> = {
   'adultchild-parent': { p1: 'Adult Child', p2: 'Parent' },
   'friend-friend': { p1: 'Friend A', p2: 'Friend B' },
   'kid-grandparent': { p1: 'Kid', p2: 'Grandparent' },
-  // NEW
   'kid-kid': { p1: 'Kid A', p2: 'Kid B' },
   'sibling-sibling': { p1: 'Sibling A', p2: 'Sibling B' },
 };
@@ -96,20 +95,44 @@ export const useGame = create<GameState>((set, get) => {
       }),
 
     setRelationship: (r) =>
-      set((s) => ({
-        relationship: r,
-        players: {
-          p1: { ...s.players.p1, role: sideLabels[r].p1.toLowerCase() },
-          p2: { ...s.players.p2, role: sideLabels[r].p2.toLowerCase() },
-        },
-      })),
+      set((s) => {
+        const prevLabels = sideLabels[s.relationship];
+        const newLabels = sideLabels[r];
+
+        const p1NameIsDefault =
+          !s.players.p1.name || s.players.p1.name === prevLabels.p1;
+        const p2NameIsDefault =
+          !s.players.p2.name || s.players.p2.name === prevLabels.p2;
+
+        return {
+          relationship: r,
+          players: {
+            p1: {
+              ...s.players.p1,
+              role: newLabels.p1.toLowerCase(),
+              // if name was just the old default, update it to the new label
+              name: p1NameIsDefault ? newLabels.p1 : s.players.p1.name,
+            },
+            p2: {
+              ...s.players.p2,
+              role: newLabels.p2.toLowerCase(),
+              name: p2NameIsDefault ? newLabels.p2 : s.players.p2.name,
+            },
+          },
+        };
+      }),
 
     setPlayer: (id, patch) =>
-      set((s) => ({ players: { ...s.players, [id]: { ...s.players[id], ...patch } } })),
+      set((s) => ({
+        players: { ...s.players, [id]: { ...s.players[id], ...patch } },
+      })),
 
     swapPlayers: () =>
       set((s) => ({
-        players: { p1: { ...s.players.p2, id: 'p1' }, p2: { ...s.players.p1, id: 'p2' } },
+        players: {
+          p1: { ...s.players.p2, id: 'p1' },
+          p2: { ...s.players.p1, id: 'p2' },
+        },
       })),
 
     addScore: (id, delta) =>
@@ -117,17 +140,23 @@ export const useGame = create<GameState>((set, get) => {
         const newScore = Math.max(0, s.players[id].score + delta);
         const newHigh = Math.max(s.highScore, newScore);
         return {
-          players: { ...s.players, [id]: { ...s.players[id], score: newScore } },
+          players: {
+            ...s.players,
+            [id]: { ...s.players[id], score: newScore },
+          },
           highScore: newHigh,
         };
       }),
 
     setPreferredKind: (k) => set({ preferredKind: k }),
 
-    addRecording: (rec) => set((s) => ({ recordings: [rec, ...s.recordings] })),
+    addRecording: (rec) =>
+      set((s) => ({ recordings: [rec, ...s.recordings] })),
 
     removeRecording: (rid) =>
-      set((s) => ({ recordings: s.recordings.filter((r) => r.meta.id !== rid) })),
+      set((s) => ({
+        recordings: s.recordings.filter((r) => r.meta.id !== rid),
+      })),
 
     resetGame: () =>
       set((s) => ({
@@ -149,4 +178,3 @@ export const useGame = create<GameState>((set, get) => {
       })),
   };
 });
-
