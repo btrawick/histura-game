@@ -24,7 +24,7 @@ export default function Home() {
         <div className="label">Relationship Mode</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
           // inside the <select> in Home.tsx:
-<select
+          <select
   value={rel}
   onChange={(e) => setRel(e.target.value as Relationship)}
   style={{ width: '100%', fontSize: 16, padding: '10px 12px' }}
@@ -33,7 +33,6 @@ export default function Home() {
   <option value="adultchild-parent">Adult Child ↔ Parent</option>
   <option value="friend-friend">Friend ↔ Friend</option>
   <option value="kid-grandparent">Kid ↔ Grandparent</option>
-  {/* NEW */}
   <option value="kid-kid">Kid ↔ Kid</option>
   <option value="sibling-sibling">Adult Sibling ↔ Adult Sibling</option>
 </select>
