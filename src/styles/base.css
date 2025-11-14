@@ -200,9 +200,29 @@ input:focus, select:focus {
   border-color: rgba(0,0,0,0.10);
 }
 
-/* Keep the prominent Play button bright in light mode */
-:root[data-theme="light"] .button.play {
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+/* Swap Players — slightly smaller */
+.button.swap {
+  transform: scale(0.93); /* ~7% reduction */
 }
 
+/* Play button — slightly smaller, but stronger highlight */
+.button.play {
+  transform: scale(0.88); /* ~12% reduction */
+  background: linear-gradient(135deg, #2563eb, #3b82f6); /* richer blue */
+  color: #fff !important;
+  font-weight: 600;
+  border: 2px solid rgba(255,255,255,0.08);
+  box-shadow: 0 0 14px rgba(37, 99, 235, 0.45);
+}
+
+.button.play:hover {
+  box-shadow: 0 0 18px rgba(37, 99, 235, 0.6);
+  transform: scale(0.90);
+}
+
+/* Light-mode overrides for Play button */
+:root[data-theme="light"] .button.play {
+  background: linear-gradient(135deg, #1e40af, #2563eb); /* even deeper blue for contrast */
+  border: 1px solid rgba(0,0,0,0.12);
+  box-shadow: 0 0 12px rgba(30, 64, 175, 0.35);
+}
