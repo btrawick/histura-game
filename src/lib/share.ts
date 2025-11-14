@@ -1,26 +1,52 @@
 // src/lib/share.ts
-import { exportGameZipBuildBlob } from '@/lib/export';
+import { buildGameZipBlob } from '@/lib/export';
 import type { GameSession, SavedRecording } from '@/types';
 
-export function canWebShareFiles() {
-  return typeof navigator !== 'undefined' && 'share' in navigator && 'canShare' in navigator;
+/**
+ * Prepare a ZIP file representing a game and return a File object.
+ * Used for integrating with APIs that accept File objects.
+ */
+export async function prepareGameZipFile(
+  game: GameSession | undefined,
+  recs: SavedRecording[]
+): Promise<File> {
+  const { blob, filename } = await buildGameZipBlob(game, recs);
+  return new File([blob], filename, {
+    type: 'application/zip'
+  });
 }
 
-export async function shareGameZip(game: GameSession, recs: SavedRecording[]) {
-  // Build the ZIP as a Blob (reuse your export code path)
-  const { blob, filename } = await exportGameZipBuildBlob(game, recs);
+/**
+ * Share a game using Web Share API (if supported).
+ * Returns true if the share sheet opened successfully, false otherwise.
+ */
+export async function tryShareGame(
+  game: GameSession | undefined,
+  recs: SavedRecording[]
+): Promise<boolean> {
+  const file = await prepareGameZipFile(game, recs);
 
-  const file = new File([blob], filename, { type: 'application/zip' });
-  const payload: ShareData = {
-    title: filename.replace(/\.zip$/, ''),
-    text: `Game: ${game.p1Name} vs ${game.p2Name}`,
-    files: [file],
-  };
+  const navAny: any =
+    typeof navigator !== 'undefined' ? navigator : null;
 
-  // If full file share is supported, use it; otherwise throw so caller can fallback
-  if ((navigator as any).canShare?.({ files: [file] })) {
-    await (navigator as any).share(payload);
-    return true;
+  if (
+    navAny &&
+    typeof navAny.share === 'function' &&
+    typeof navAny.canShare === 'function'
+  ) {
+    try {
+      if (navAny.canShare({ files: [file] })) {
+        await navAny.share({
+          files: [file],
+          title: 'Histura Game Export',
+          text: 'Here is our Histura game recording export.'
+        });
+        return true;
+      }
+    } catch {
+      return false;
+    }
   }
+
   return false;
 }
