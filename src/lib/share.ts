@@ -16,57 +16,49 @@ export async function tryShareGame(
   recs: SavedRecording[]
 ): Promise<boolean> {
   const file = await prepareGameZipFile(game, recs);
-
-  const navAny: any = typeof navigator !== 'undefined' ? navigator : null;
-
-  if (navAny && typeof navAny.share === 'function' && typeof navAny.canShare === 'function') {
-    try {
-      if (navAny.canShare({ files: [file] })) {
-        await navAny.share({
-          files: [file],
-          title: 'Histura Game Export',
-          text: 'Here is our Histura game recording export.',
-        });
-        return true;
-      }
-    } catch {
-      return false;
-    }
-  }
-  return false;
+  return shareFile(file, 'Histura Game Export', 'Here is our Histura game export.');
 }
 
 /**
  * Share a single recording as a file using Web Share API.
- * Returns true if the share sheet opened successfully, false otherwise.
+ * Returns true if the share sheet opened with a file attached, false otherwise.
  */
-export async function tryShareRecording(
-  rec: SavedRecording,
-  filename: string
-): Promise<boolean> {
+export async function tryShareRecording(rec: SavedRecording, filename: string): Promise<boolean> {
   const blob = await getBlob(rec.blobKey);
   if (!blob) return false;
 
-  const file = new File([blob], filename, {
-    type: rec.meta.mimeType || blob.type || 'application/octet-stream',
-  });
+  const mime = rec.meta.mimeType || blob.type || 'application/octet-stream';
+  const file = new File([blob], filename, { type: mime });
 
+  return shareFile(file, 'Histura Recording', 'Histura recording attached.');
+}
+
+async function shareFile(file: File, title: string, text: string): Promise<boolean> {
   const navAny: any = typeof navigator !== 'undefined' ? navigator : null;
+  if (!navAny || typeof navAny.share !== 'function') return false;
 
-  if (navAny && typeof navAny.share === 'function' && typeof navAny.canShare === 'function') {
+  // Prefer canShare when it exists, but DO NOT require it (iOS can be inconsistent)
+  const canShareFn = typeof navAny.canShare === 'function' ? navAny.canShare.bind(navAny) : null;
+  if (canShareFn) {
     try {
-      if (navAny.canShare({ files: [file] })) {
-        await navAny.share({
-          files: [file],
-          title: 'Histura Recording',
-          text: 'Sharing a Histura recording.',
-        });
-        return true;
-      }
+      const ok = canShareFn({ files: [file] });
+      if (!ok) return false;
+    } catch {
+      // ignore and attempt share anyway
+    }
+  }
+
+  // Attempt to share WITH file attached
+  try {
+    await navAny.share({ files: [file], title, text });
+    return true;
+  } catch {
+    // Some implementations can fail when both files+text are present; retry files-only.
+    try {
+      await navAny.share({ files: [file], title });
+      return true;
     } catch {
       return false;
     }
   }
-
-  return false;
 }
