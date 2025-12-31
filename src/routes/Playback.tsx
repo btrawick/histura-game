@@ -4,7 +4,7 @@ import { useGame } from '@/lib/store';
 import { exportGameZip } from '@/lib/export';
 import { questions } from '@/lib/questions-relations';
 import { getBlob, deleteBlob } from '@/lib/storage';
-import { tryShareGame } from '@/lib/share';
+import { tryShareGame, tryShareRecording } from '@/lib/share';
 import type { SavedRecording } from '@/types';
 
 export default function Playback() {
@@ -53,7 +53,6 @@ export default function Playback() {
 
               {g && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {/* Delete Game */}
                   <button
                     className="button secondary"
                     disabled={busy === `delete:${gameId}` || busy === `share:${gameId}` || busy === gameId}
@@ -64,11 +63,9 @@ export default function Playback() {
                       if (!ok) return;
                       setBusy(`delete:${gameId}`);
                       try {
-                        // Delete all blobs for this game
                         for (const r of recs) {
                           await deleteBlob(r.blobKey);
                         }
-                        // Remove from state
                         deleteGame(gameId);
                       } finally {
                         setBusy(null);
@@ -79,7 +76,6 @@ export default function Playback() {
                     {busy === `delete:${gameId}` ? 'Deleting…' : 'Delete Game'}
                   </button>
 
-                  {/* Share Game */}
                   <button
                     className="button secondary"
                     disabled={busy === `share:${gameId}` || busy === `delete:${gameId}` || busy === gameId}
@@ -89,23 +85,20 @@ export default function Playback() {
                         const ok = await tryShareGame(g, recs);
                         if (!ok) {
                           window.alert(
-                            'Sharing is not available on this device or browser. You can still use "Export ZIP" to save the files.'
+                            'Sharing a full game ZIP is not available here. Try sharing individual recordings below (recommended on iPhone).'
                           );
                         }
                       } catch {
-                        window.alert(
-                          'Something went wrong while trying to share. Please try again or use "Export ZIP".'
-                        );
+                        window.alert('Sharing failed. Try individual recording share below.');
                       } finally {
                         setBusy(null);
                       }
                     }}
-                    title="Share this game using your device share sheet"
+                    title="Share this game (may fail on iPhone if large)"
                   >
-                    {busy === `share:${gameId}` ? 'Sharing…' : 'Share'}
+                    {busy === `share:${gameId}` ? 'Sharing…' : 'Share Game'}
                   </button>
 
-                  {/* Export ZIP */}
                   <button
                     className="button"
                     disabled={busy === gameId || busy === `share:${gameId}` || busy === `delete:${gameId}`}
@@ -132,11 +125,33 @@ export default function Playback() {
                   r.meta.playerId === 'p1'
                     ? g?.p1Name ?? 'Player 1'
                     : g?.p2Name ?? 'Player 2';
-                const label = `${name} — ${truncate(
-                  q?.text ?? r.meta.questionId,
-                  60
-                )} (${r.meta.points} pts)`;
-                return <PlaybackRow key={r.meta.id} rec={r} label={label} />;
+
+                const truncatedQ = truncate(q?.text ?? r.meta.questionId, 60);
+                const label = `${name} — ${truncatedQ} (${r.meta.points} pts)`;
+
+                const safeFile = makeRecordingFilename(name, truncatedQ, r);
+
+                return (
+                  <PlaybackRow
+                    key={r.meta.id}
+                    rec={r}
+                    label={label}
+                    filename={safeFile}
+                    busy={busy === `recshare:${r.meta.id}`}
+                    onShare={async () => {
+                      setBusy(`recshare:${r.meta.id}`);
+                      try {
+                        const ok = await tryShareRecording(r, safeFile);
+                        if (!ok) {
+                          // Fallback download
+                          await downloadRecording(r, safeFile);
+                        }
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  />
+                );
               })}
             </div>
           </div>
@@ -146,27 +161,57 @@ export default function Playback() {
   );
 }
 
-function PlaybackRow({ rec, label }: { rec: SavedRecording; label: string }) {
+function PlaybackRow({
+  rec,
+  label,
+  filename,
+  busy,
+  onShare,
+}: {
+  rec: SavedRecording;
+  label: string;
+  filename: string;
+  busy: boolean;
+  onShare: () => void;
+}) {
   const url = useObjectURL(rec.blobKey);
+
   return (
     <div
       className="row"
-      style={{ justifyContent: 'space-between', gap: 12, alignItems: 'center' }}
+      style={{
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'center',
+      }}
     >
-      <div
-        style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {label}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={label}
+        >
+          {label}
+        </div>
+
+        <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="button secondary" onClick={onShare} disabled={busy} title="Share or download this recording">
+            {busy ? 'Sharing…' : 'Share'}
+          </button>
+          <span style={{ fontSize: 12, opacity: 0.75 }}>{filename}</span>
+        </div>
       </div>
-      {rec.meta.kind === 'video' ? (
-        <video controls src={url ?? undefined} style={{ maxWidth: 240, borderRadius: 8 }} />
-      ) : (
-        <audio controls src={url ?? undefined} />
-      )}
+
+      <div style={{ flexShrink: 0 }}>
+        {rec.meta.kind === 'video' ? (
+          <video controls src={url ?? undefined} style={{ maxWidth: 240, borderRadius: 8 }} />
+        ) : (
+          <audio controls src={url ?? undefined} />
+        )}
+      </div>
     </div>
   );
 }
@@ -175,19 +220,55 @@ function useObjectURL(key: string) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let mounted = true;
+    let u: string | null = null;
+
     (async () => {
       const b = await getBlob(key);
       if (!mounted || !b) return;
-      const u = URL.createObjectURL(b);
+      u = URL.createObjectURL(b);
       setUrl(u);
     })();
+
     return () => {
       mounted = false;
-      if (url) URL.revokeObjectURL(url);
+      if (u) URL.revokeObjectURL(u);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return url;
+}
+
+async function downloadRecording(rec: SavedRecording, filename: string) {
+  const blob = await getBlob(rec.blobKey);
+  if (!blob) {
+    window.alert('Could not load recording data.');
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function makeRecordingFilename(name: string, truncatedQ: string, r: SavedRecording) {
+  const ext = r.meta.kind === 'video' ? 'webm' : 'webm';
+  // Many iPhone browsers still end up with video/webm from MediaRecorder; keep ext consistent.
+  const base = `${slug(name)}-${slug(truncatedQ)}-${r.meta.points}pts`;
+  return `${base}.${ext}`;
+}
+
+function slug(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
 }
 
 function truncate(s: string, n: number) {
@@ -222,4 +303,3 @@ function lookupQuestion(id: string) {
   }
   return null;
 }
-
