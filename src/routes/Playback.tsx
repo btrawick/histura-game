@@ -42,17 +42,38 @@ export default function Playback() {
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: 12,
               }}
             >
-              <div>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="label">{started}</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{title}</div>
+
+                {/* WRAP ENABLED FOR GAME TITLE */}
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    whiteSpace: 'normal',
+                    overflowWrap: 'anywhere',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  {title}
+                </div>
               </div>
 
               {g && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
                   <button
                     className="button secondary"
                     disabled={busy === `delete:${gameId}` || busy === `share:${gameId}` || busy === gameId}
@@ -143,7 +164,6 @@ export default function Playback() {
                       try {
                         const ok = await tryShareRecording(r, safeFile);
                         if (!ok) {
-                          // Fallback download
                           await downloadRecording(r, safeFile);
                         }
                       } finally {
@@ -182,26 +202,52 @@ function PlaybackRow({
       style={{
         justifyContent: 'space-between',
         gap: 12,
-        alignItems: 'center',
+        alignItems: 'flex-start',
       }}
     >
       <div style={{ minWidth: 0, flex: 1 }}>
+        {/* WRAP ENABLED FOR RECORDING LABEL */}
         <div
           style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
+            lineHeight: 1.25,
           }}
           title={label}
         >
           {label}
         </div>
 
-        <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="button secondary" onClick={onShare} disabled={busy} title="Share or download this recording">
+        <div
+          style={{
+            marginTop: 8,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            className="button secondary"
+            onClick={onShare}
+            disabled={busy}
+            title="Share or download this recording"
+          >
             {busy ? 'Sharing…' : 'Share'}
           </button>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>{filename}</span>
+
+          {/* WRAP ENABLED FOR FILENAME */}
+          <span
+            style={{
+              fontSize: 12,
+              opacity: 0.75,
+              whiteSpace: 'normal',
+              overflowWrap: 'anywhere',
+              lineHeight: 1.2,
+            }}
+          >
+            {filename}
+          </span>
         </div>
       </div>
 
@@ -277,7 +323,6 @@ function slug(s: string) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 }
-
 
 function truncate(s: string, n: number) {
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
