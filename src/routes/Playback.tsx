@@ -257,8 +257,15 @@ async function downloadRecording(rec: SavedRecording, filename: string) {
 }
 
 function makeRecordingFilename(name: string, truncatedQ: string, r: SavedRecording) {
-  const ext = r.meta.kind === 'video' ? 'webm' : 'webm';
-  // Many iPhone browsers still end up with video/webm from MediaRecorder; keep ext consistent.
+  const mime = (r.meta.mimeType || '').toLowerCase();
+
+  let ext = 'bin';
+  if (mime.includes('mp4')) ext = 'mp4';
+  else if (mime.includes('webm')) ext = 'webm';
+  else if (mime.includes('ogg')) ext = 'ogg';
+  else if (mime.includes('wav')) ext = 'wav';
+  else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
+
   const base = `${slug(name)}-${slug(truncatedQ)}-${r.meta.points}pts`;
   return `${base}.${ext}`;
 }
@@ -270,6 +277,7 @@ function slug(s: string) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 }
+
 
 function truncate(s: string, n: number) {
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
