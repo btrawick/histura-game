@@ -8,11 +8,37 @@ import RecordButton from '@/components/RecordButton';
 import { pointsForDuration } from '@/lib/scoring';
 import { saveBlob } from '@/lib/storage';
 import type { SavedRecording } from '@/types';
-import { getRandomQuestionFor } from '@/lib/questions-relations';
+import { getRandomQuestionFor, questions as allQuestions } from '@/lib/questions-relations';
 
 type OverlayMode = 'ready' | 'countdown';
-const promptSideForSpeaker = (speaker: 'p1' | 'p2'): 'p1' | 'p2' =>
-  speaker === 'p1' ? 'p2' : 'p1';
+
+const askerSideForAnswerer = (answerer: 'p1' | 'p2'): 'p1' | 'p2' =>
+  answerer === 'p1' ? 'p2' : 'p1';
+
+const otherPlayer = (id: 'p1' | 'p2'): 'p1' | 'p2' => (id === 'p1' ? 'p2' : 'p1');
+
+function usedKey(gameId: string, answerer: 'p1' | 'p2') {
+  return `histura-usedq:${gameId}:${answerer}`;
+}
+
+function loadUsed(gameId: string, answerer: 'p1' | 'p2'): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(usedKey(gameId, answerer));
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(arr);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveUsed(gameId: string, answerer: 'p1' | 'p2', used: Set<string>) {
+  try {
+    sessionStorage.setItem(usedKey(gameId, answerer), JSON.stringify(Array.from(used)));
+  } catch {
+    // ignore
+  }
+}
 
 export default function Play() {
   const navigate = useNavigate();
@@ -29,15 +55,39 @@ export default function Play() {
     currentGameId,
   } = useGame();
 
-  const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
-  const [question, setQuestion] = useState(() =>
-    getRandomQuestionFor(relationship, promptSideForSpeaker('p1'))
-  );
-
   const rec = useRecorder(preferredKind);
 
   const mainMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const overlayMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+
+  // Pick a question with "no repeats for same answerer in same game"
+  function pickQuestionNoRepeat(answerer: 'p1' | 'p2') {
+    const askerSide = askerSideForAnswerer(answerer);
+    const pool = allQuestions[relationship]?.[askerSide] ?? [];
+    if (pool.length === 0) {
+      return getRandomQuestionFor(relationship, askerSide);
+    }
+
+    const used = loadUsed(currentGameId, answerer);
+    const available = pool.filter((q) => !used.has(q.id));
+
+    // If exhausted, reset used for that answerer & keep going
+    const chosenPool = available.length > 0 ? available : pool;
+
+    const idx = Math.floor(Math.random() * chosenPool.length);
+    const q = chosenPool[idx];
+
+    if (available.length === 0) {
+      used.clear();
+    }
+    used.add(q.id);
+    saveUsed(currentGameId, answerer, used);
+
+    return q;
+  }
+
+  const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
+  const [question, setQuestion] = useState(() => pickQuestionNoRepeat('p1'));
 
   const [overlay, setOverlay] = useState<{
     show: boolean;
@@ -56,23 +106,22 @@ export default function Play() {
   const [showSummary, setShowSummary] = useState(false);
   const [confetti, setConfetti] = useState(0);
 
-  // Pre-warm permissions
   useEffect(() => {
     rec.ensurePermission().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Attach recorder to the *visible* element (overlay vs main)
   useEffect(() => {
     const el = overlay.show ? overlayMediaRef.current : mainMediaRef.current;
     if (el) rec.attach(el);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlay.show, preferredKind]);
 
-  // Update question when relationship or current player changes
+  // When relationship changes, re-pick (still respecting no-repeat for answerer)
   useEffect(() => {
-    setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(currentPlayer)));
-  }, [relationship, currentPlayer]);
+    setQuestion(pickQuestionNoRepeat(currentPlayer));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relationship]);
 
   function triggerConfetti() {
     setConfetti((n) => n + 1);
@@ -95,7 +144,7 @@ export default function Play() {
 
   function startTurn(next: 'p1' | 'p2') {
     setCurrentPlayer(next);
-    setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker(next)));
+    setQuestion(pickQuestionNoRepeat(next));
     if (mainMediaRef.current) rec.attach(mainMediaRef.current);
     rec.start();
   }
@@ -146,13 +195,10 @@ export default function Play() {
     }
   }
 
-  // Close ready/countdown overlay and go back home (used by the "X")
   function closeOverlay() {
     try {
       rec.stop();
-    } catch {
-      // ignore
-    }
+    } catch {}
     setOverlay((o) => ({ ...o, show: false }));
     navigate('/');
   }
@@ -192,7 +238,11 @@ export default function Play() {
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="label">Prompt</div>
+        <div style={{ opacity: 0.8, marginBottom: 6 }}>
+          Asked by: <b>{players[otherPlayer(currentPlayer)].name}</b> ({players[otherPlayer(currentPlayer)].role})
+        </div>
         <div style={{ fontSize: 20, marginBottom: 12 }}>{question.text}</div>
+
         <TimerAndStars sec={rec.elapsed} />
 
         <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -214,14 +264,12 @@ export default function Play() {
         </div>
       </div>
 
-      {/* READY / COUNTDOWN OVERLAY */}
       {overlay.show && (
         <div className="overlay">
           <div
             className="overlay-card"
             style={{ width: 520, maxWidth: '95vw', position: 'relative' }}
           >
-            {/* Close X */}
             <button
               onClick={closeOverlay}
               title="Cancel"
@@ -246,17 +294,13 @@ export default function Play() {
             </button>
 
             <div className="label">Next up (answering)</div>
-            <div
-              style={{
-                fontWeight: 800,
-                fontSize: 22,
-                marginBottom: 8,
-              }}
-            >
+            <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 6 }}>
               {players[overlay.next].name}
             </div>
+            <div style={{ opacity: 0.8, marginBottom: 8 }}>
+              Asked by: <b>{players[otherPlayer(overlay.next)].name}</b> ({players[otherPlayer(overlay.next)].role})
+            </div>
 
-            {/* Preview with BIG countdown overlay */}
             <div
               className="card"
               style={{
@@ -299,19 +343,9 @@ export default function Play() {
               )}
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                marginTop: 10,
-                justifyContent: 'center',
-              }}
-            >
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'center' }}>
               {preferredKind === 'video' && (
-                <button
-                  className="button secondary"
-                  onClick={() => rec.cycleCamera()}
-                >
+                <button className="button secondary" onClick={() => rec.cycleCamera()}>
                   Switch camera
                 </button>
               )}
@@ -343,7 +377,7 @@ export default function Play() {
             setEndOpen(false);
             setOverlay({ show: true, next: 'p1', mode: 'ready', count: 3 });
             setCurrentPlayer('p1');
-            setQuestion(getRandomQuestionFor(relationship, promptSideForSpeaker('p1')));
+            setQuestion(pickQuestionNoRepeat('p1'));
             if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
           }}
           onNewGame={() => {
@@ -413,14 +447,7 @@ function RoundSummary({
           Longest: <b>{longest}</b>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            marginTop: 12,
-            justifyContent: 'center',
-          }}
-        >
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
           <button className="button" onClick={onContinue}>
             Continue
           </button>
@@ -483,3 +510,4 @@ function EndGameOverlay({
     </div>
   );
 }
+
