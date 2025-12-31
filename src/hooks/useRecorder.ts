@@ -1,162 +1,286 @@
 // src/hooks/useRecorder.ts
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export function useRecorder(kind: 'audio' | 'video') {
-  const [permission, setPermission] = useState<'idle' | 'granted' | 'denied'>('idle');
+type Kind = 'audio' | 'video';
+
+type RecorderApi = {
+  recording: boolean;
+  elapsed: number; // seconds
+  ensurePermission: () => Promise<void>;
+  attach: (el: HTMLVideoElement | HTMLAudioElement) => void;
+  start: () => Promise<void>;
+  stop: () => Promise<Blob | null>;
+  cycleCamera: () => Promise<void>;
+};
+
+function pickMime(kind: Kind) {
+  // Prefer modern webm first; iOS Safari support is inconsistent, but we pick what the browser supports.
+  const candidates =
+    kind === 'video'
+      ? [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+          'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+          'video/mp4',
+        ]
+      : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+
+  for (const t of candidates) {
+    try {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
+    } catch {
+      // ignore
+    }
+  }
+  return '';
+}
+
+export function useRecorder(kind: Kind): RecorderApi {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>([]);
-  const [videoIndex, setVideoIndex] = useState<number | null>(null);
 
-  const mediaRef = useRef<MediaStream | null>(null);
-  const recRef = useRef<MediaRecorder | null>(null);
+  const mediaElRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const startTsRef = useRef<number>(0);
   const tickRef = useRef<number | null>(null);
-  const attachRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
-  useEffect(() => {
-    return () => {
-      stopClock();
-      stopStream();
-    };
+  const videoDeviceIdsRef = useRef<string[]>([]);
+  const currentVideoIndexRef = useRef<number>(0);
+
+  const mimeType = useMemo(() => pickMime(kind), [kind]);
+
+  const stopTick = () => {
+    if (tickRef.current) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+  };
+
+  const startTick = () => {
+    stopTick();
+    tickRef.current = window.setInterval(() => {
+      if (!startTsRef.current) return;
+      const sec = (Date.now() - startTsRef.current) / 1000;
+      setElapsed(sec);
+    }, 150);
+  };
+
+  const attach = useCallback((el: HTMLVideoElement | HTMLAudioElement) => {
+    mediaElRef.current = el;
+    const s = streamRef.current;
+    if (!s) return;
+
+    // @ts-ignore - srcObject exists on HTMLMediaElement
+    el.srcObject = s;
   }, []);
 
-  function stopClock() {
-    if (tickRef.current) cancelAnimationFrame(tickRef.current);
-    tickRef.current = null;
-  }
+  const stopTracks = (s: MediaStream | null) => {
+    if (!s) return;
+    s.getTracks().forEach((t) => {
+      try {
+        t.stop();
+      } catch {}
+    });
+  };
 
-  function stopStream() {
-    mediaRef.current?.getTracks().forEach((t) => t.stop());
-    mediaRef.current = null;
-  }
+  const ensurePermission = useCallback(async () => {
+    // If we already have a stream, we’re good.
+    if (streamRef.current) return;
 
-  async function refreshDevices() {
+    // Collect camera devices for cycling
     try {
-      const devs = await navigator.mediaDevices.enumerateDevices();
-      const vids = devs.filter((d) => d.kind === 'videoinput');
-      setVideoInputs(vids);
-      if (vids.length && videoIndex === null) setVideoIndex(0);
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      videoDeviceIdsRef.current = devices.filter((d) => d.kind === 'videoinput').map((d) => d.deviceId);
+      currentVideoIndexRef.current = 0;
     } catch {
-      /* ignore */
+      videoDeviceIdsRef.current = [];
+      currentVideoIndexRef.current = 0;
     }
-  }
 
-  async function ensurePermission() {
-    try {
-      const constraints: MediaStreamConstraints = kind === 'video' ? { video: true, audio: true } : { audio: true };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      mediaRef.current = stream;
-      setPermission('granted');
-      await refreshDevices();
-      return stream;
-    } catch (e) {
-      console.error(e);
-      setPermission('denied');
-      throw e;
+    const wantVideo = kind === 'video';
+
+    // 720p constraints (ideal); some devices will negotiate down.
+    const constraints: MediaStreamConstraints = {
+      audio: true,
+      video: wantVideo
+        ? {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 30 },
+          }
+        : false,
+    };
+
+    const s = await navigator.mediaDevices.getUserMedia(constraints);
+    streamRef.current = s;
+
+    // Attach to current element if present
+    if (mediaElRef.current) {
+      // @ts-ignore
+      mediaElRef.current.srcObject = s;
     }
-  }
+  }, [kind]);
 
-  function attach(el: HTMLVideoElement | HTMLAudioElement | null) {
-    attachRef.current = el;
-    if (!el || !mediaRef.current) return;
-    (el as any).srcObject = mediaRef.current;
-  }
+  const buildRecorder = useCallback(() => {
+    const s = streamRef.current;
+    if (!s) throw new Error('No media stream available');
 
-  async function start() {
-    const have = mediaRef.current ?? (await ensurePermission());
-    if (!have) return;
+    // IMPORTANT: bitrate control here (3 Mbps video).
+    const opts: MediaRecorderOptions = {
+      mimeType: mimeType || undefined,
+      videoBitsPerSecond: kind === 'video' ? 3_000_000 : undefined,
+      audioBitsPerSecond: 96_000,
+    };
 
-    // If video: rebuild stream to respect specific camera device if set
-    if (kind === 'video') {
-      const deviceId = videoInputs[videoIndex ?? 0]?.deviceId;
-      stopStream();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' },
-      });
-      mediaRef.current = stream;
-      if (attachRef.current) (attachRef.current as any).srcObject = stream;
-    }
+    const mr = new MediaRecorder(s, opts);
+    recorderRef.current = mr;
+
+    mr.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    mr.onstart = () => {
+      startTsRef.current = Date.now();
+      setElapsed(0);
+      setRecording(true);
+      startTick();
+    };
+    mr.onstop = () => {
+      stopTick();
+      setRecording(false);
+    };
+
+    return mr;
+  }, [kind, mimeType]);
+
+  const start = useCallback(async () => {
+    await ensurePermission();
+
+    // If already recording, do nothing
+    if (recorderRef.current && recorderRef.current.state === 'recording') return;
 
     chunksRef.current = [];
+    const mr = buildRecorder();
 
-    const mimeType = pickMime();
-    const options: MediaRecorderOptions | undefined = mimeType ? { mimeType } : undefined;
+    // Timeslice keeps memory lower for long recordings.
+    // 1000ms is a good compromise.
+    mr.start(1000);
+  }, [ensurePermission, buildRecorder]);
 
-    const rec = new MediaRecorder(mediaRef.current!, options);
-    recRef.current = rec;
-    setRecording(true);
+  const stop = useCallback(async (): Promise<Blob | null> => {
+    const mr = recorderRef.current;
+    if (!mr) return null;
 
-    const startedAt = performance.now();
-    const loop = () => {
-      setElapsed((performance.now() - startedAt) / 1000);
-      tickRef.current = requestAnimationFrame(loop);
-    };
-    tickRef.current = requestAnimationFrame(loop);
-
-    rec.ondataavailable = (ev) => {
-      if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
-    };
-    rec.start(100);
-  }
-
-  async function stop(): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      const rec = recRef.current;
-      if (!rec) return resolve(null);
-      rec.onstop = () => {
-        stopClock();
-        setRecording(false);
-        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'application/octet-stream' });
-        chunksRef.current = [];
-        resolve(blob);
-      };
-      rec.stop();
-    });
-  }
-
-  /** Cycle to the next available camera (when kind === 'video'). */
-  async function cycleCamera() {
-    if (kind !== 'video') return;
-    if (recording) return; // avoid switching mid-recording
-    if (!videoInputs.length) await refreshDevices();
-    if (!videoInputs.length) return;
-
-    const nextIdx = ((videoIndex ?? 0) + 1) % videoInputs.length;
-    setVideoIndex(nextIdx);
-
-    const deviceId = videoInputs[nextIdx]?.deviceId;
-    if (deviceId) {
-      stopStream();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: { deviceId: { exact: deviceId } },
+    if (mr.state === 'inactive') {
+      // If stopped already, still try to assemble what we have.
+      if (!chunksRef.current.length) return null;
+    } else {
+      await new Promise<void>((resolve) => {
+        const onStop = () => resolve();
+        mr.addEventListener('stop', onStop, { once: true });
+        try {
+          mr.stop();
+        } catch {
+          resolve();
+        }
       });
-      mediaRef.current = stream;
-      if (attachRef.current) (attachRef.current as any).srcObject = stream;
     }
-  }
 
-  return { permission, recording, elapsed, start, stop, attach, ensurePermission, cycleCamera };
-}
+    const parts = chunksRef.current;
+    chunksRef.current = [];
 
-function isTypeSupported(m: string): boolean {
-  // Some browsers lack isTypeSupported or MediaRecorder
-  const MR: any = (globalThis as any).MediaRecorder;
-  return !!(MR && typeof MR.isTypeSupported === 'function' && MR.isTypeSupported(m));
-}
+    const type =
+      (mimeType && mimeType.split(';')[0]) ||
+      (kind === 'video' ? 'video/webm' : 'audio/webm');
 
-function pickMime(): string | undefined {
-  const candidates = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'audio/webm;codecs=opus',
-    'video/mp4', // may not be allowed/encodable by MediaRecorder in many browsers
-    'audio/mp4',
-  ];
-  for (const c of candidates) {
-    if (isTypeSupported(c)) return c;
-  }
-  return undefined;
+    const blob = new Blob(parts, { type });
+
+    return blob.size ? blob : null;
+  }, [kind, mimeType]);
+
+  const cycleCamera = useCallback(async () => {
+    if (kind !== 'video') return;
+
+    // If we can’t enumerate devices, do nothing.
+    if (!videoDeviceIdsRef.current.length) {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        videoDeviceIdsRef.current = devices.filter((d) => d.kind === 'videoinput').map((d) => d.deviceId);
+      } catch {
+        return;
+      }
+    }
+    if (videoDeviceIdsRef.current.length < 2) return;
+
+    currentVideoIndexRef.current =
+      (currentVideoIndexRef.current + 1) % videoDeviceIdsRef.current.length;
+    const deviceId = videoDeviceIdsRef.current[currentVideoIndexRef.current];
+
+    const oldStream = streamRef.current;
+    if (!oldStream) return;
+
+    // Keep existing audio track; replace only video track
+    const audioTracks = oldStream.getAudioTracks();
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        deviceId: { exact: deviceId },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 30 },
+      },
+    });
+
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    if (!newVideoTrack) return;
+
+    // Stop old video tracks
+    oldStream.getVideoTracks().forEach((t) => {
+      try {
+        t.stop();
+      } catch {}
+      oldStream.removeTrack(t);
+    });
+
+    oldStream.addTrack(newVideoTrack);
+
+    // Ensure audio tracks are still present
+    audioTracks.forEach((t) => {
+      if (!oldStream.getAudioTracks().includes(t)) oldStream.addTrack(t);
+    });
+
+    // Update attached element
+    if (mediaElRef.current) {
+      // @ts-ignore
+      mediaElRef.current.srcObject = oldStream;
+    }
+  }, [kind]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopTick();
+      try {
+        recorderRef.current?.stop();
+      } catch {}
+      recorderRef.current = null;
+      stopTracks(streamRef.current);
+      streamRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return {
+    recording,
+    elapsed,
+    ensurePermission,
+    attach,
+    start,
+    stop,
+    cycleCamera,
+  };
 }
