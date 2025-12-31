@@ -13,25 +13,43 @@ type RecorderApi = {
   cycleCamera: () => Promise<void>;
 };
 
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+}
+
 function pickMime(kind: Kind) {
-  // Prefer modern webm first; iOS Safari support is inconsistent, but we pick what the browser supports.
-  const candidates =
-    kind === 'video'
-      ? [
-          'video/webm;codecs=vp9,opus',
-          'video/webm;codecs=vp8,opus',
-          'video/webm',
-          'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-          'video/mp4',
-        ]
-      : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+  const ios = typeof navigator !== 'undefined' && isIOS();
+
+  const videoCandidates = ios
+    ? [
+        // iOS: prefer MP4 first
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4',
+        // fallback
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+      ]
+    : [
+        // Others: webm first
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        // fallback
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4',
+      ];
+
+  const audioCandidates = ios
+    ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+    : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+
+  const candidates = kind === 'video' ? videoCandidates : audioCandidates;
 
   for (const t of candidates) {
     try {
       if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
   return '';
 }
