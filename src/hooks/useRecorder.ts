@@ -13,7 +13,6 @@ type RecorderApi = {
   cycleCamera: () => Promise<void>;
 };
 
-
 function isIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 }
@@ -23,7 +22,7 @@ function pickMime(kind: Kind) {
 
   const videoCandidates = ios
     ? [
-        // iOS: prefer MP4 first
+        // iOS: prefer MP4 first if supported
         'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
         'video/mp4',
         // fallback
@@ -59,13 +58,16 @@ export function useRecorder(kind: Kind): RecorderApi {
   const [elapsed, setElapsed] = useState(0);
 
   const mediaElRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
-
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const startTsRef = useRef<number>(0);
   const tickRef = useRef<number | null>(null);
 
+  // NEW: toggle only between front/back
+  const facingRef = useRef<'user' | 'environment'>('user');
+
+  // Optional fallback: list of deviceIds (only used if facingMode fails)
   const videoDeviceIdsRef = useRef<string[]>([]);
   const currentVideoIndexRef = useRef<number>(0);
 
@@ -91,8 +93,7 @@ export function useRecorder(kind: Kind): RecorderApi {
     mediaElRef.current = el;
     const s = streamRef.current;
     if (!s) return;
-
-    // @ts-ignore - srcObject exists on HTMLMediaElement
+    // @ts-ignore
     el.srcObject = s;
   }, []);
 
@@ -105,11 +106,25 @@ export function useRecorder(kind: Kind): RecorderApi {
     });
   };
 
+  const getVideoConstraints = useCallback(
+    (override?: { deviceId?: string; facingMode?: 'user' | 'environment' }) => {
+      // 720p + 30fps cap
+      const base: any = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 30 },
+      };
+      if (override?.deviceId) base.deviceId = { exact: override.deviceId };
+      if (override?.facingMode) base.facingMode = { ideal: override.facingMode };
+      return base as MediaTrackConstraints;
+    },
+    []
+  );
+
   const ensurePermission = useCallback(async () => {
-    // If we already have a stream, we’re good.
     if (streamRef.current) return;
 
-    // Collect camera devices for cycling
+    // Try to learn devices for fallback (not required for front/back toggling)
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       videoDeviceIdsRef.current = devices.filter((d) => d.kind === 'videoinput').map((d) => d.deviceId);
@@ -121,33 +136,24 @@ export function useRecorder(kind: Kind): RecorderApi {
 
     const wantVideo = kind === 'video';
 
-    // 720p constraints (ideal); some devices will negotiate down.
     const constraints: MediaStreamConstraints = {
       audio: true,
-      video: wantVideo
-        ? {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30, max: 30 },
-          }
-        : false,
+      video: wantVideo ? getVideoConstraints({ facingMode: facingRef.current }) : false,
     };
 
     const s = await navigator.mediaDevices.getUserMedia(constraints);
     streamRef.current = s;
 
-    // Attach to current element if present
     if (mediaElRef.current) {
       // @ts-ignore
       mediaElRef.current.srcObject = s;
     }
-  }, [kind]);
+  }, [kind, getVideoConstraints]);
 
   const buildRecorder = useCallback(() => {
     const s = streamRef.current;
     if (!s) throw new Error('No media stream available');
 
-    // IMPORTANT: bitrate control here (3 Mbps video).
     const opts: MediaRecorderOptions = {
       mimeType: mimeType || undefined,
       videoBitsPerSecond: kind === 'video' ? 3_000_000 : undefined,
@@ -177,14 +183,10 @@ export function useRecorder(kind: Kind): RecorderApi {
   const start = useCallback(async () => {
     await ensurePermission();
 
-    // If already recording, do nothing
     if (recorderRef.current && recorderRef.current.state === 'recording') return;
 
     chunksRef.current = [];
     const mr = buildRecorder();
-
-    // Timeslice keeps memory lower for long recordings.
-    // 1000ms is a good compromise.
     mr.start(1000);
   }, [ensurePermission, buildRecorder]);
 
@@ -192,13 +194,9 @@ export function useRecorder(kind: Kind): RecorderApi {
     const mr = recorderRef.current;
     if (!mr) return null;
 
-    if (mr.state === 'inactive') {
-      // If stopped already, still try to assemble what we have.
-      if (!chunksRef.current.length) return null;
-    } else {
+    if (mr.state !== 'inactive') {
       await new Promise<void>((resolve) => {
-        const onStop = () => resolve();
-        mr.addEventListener('stop', onStop, { once: true });
+        mr.addEventListener('stop', () => resolve(), { once: true });
         try {
           mr.stop();
         } catch {
@@ -215,70 +213,99 @@ export function useRecorder(kind: Kind): RecorderApi {
       (kind === 'video' ? 'video/webm' : 'audio/webm');
 
     const blob = new Blob(parts, { type });
-
     return blob.size ? blob : null;
   }, [kind, mimeType]);
 
-  const cycleCamera = useCallback(async () => {
-    if (kind !== 'video') return;
+  const replaceVideoTrack = useCallback(async (newTrack: MediaStreamTrack) => {
+    const s = streamRef.current;
+    if (!s) return;
 
-    // If we can’t enumerate devices, do nothing.
-    if (!videoDeviceIdsRef.current.length) {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        videoDeviceIdsRef.current = devices.filter((d) => d.kind === 'videoinput').map((d) => d.deviceId);
-      } catch {
-        return;
-      }
-    }
-    if (videoDeviceIdsRef.current.length < 2) return;
-
-    currentVideoIndexRef.current =
-      (currentVideoIndexRef.current + 1) % videoDeviceIdsRef.current.length;
-    const deviceId = videoDeviceIdsRef.current[currentVideoIndexRef.current];
-
-    const oldStream = streamRef.current;
-    if (!oldStream) return;
-
-    // Keep existing audio track; replace only video track
-    const audioTracks = oldStream.getAudioTracks();
-
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        deviceId: { exact: deviceId },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30, max: 30 },
-      },
-    });
-
-    const newVideoTrack = newStream.getVideoTracks()[0];
-    if (!newVideoTrack) return;
-
-    // Stop old video tracks
-    oldStream.getVideoTracks().forEach((t) => {
+    // stop + remove old video tracks
+    s.getVideoTracks().forEach((t) => {
       try {
         t.stop();
       } catch {}
-      oldStream.removeTrack(t);
+      try {
+        s.removeTrack(t);
+      } catch {}
     });
 
-    oldStream.addTrack(newVideoTrack);
+    s.addTrack(newTrack);
 
-    // Ensure audio tracks are still present
-    audioTracks.forEach((t) => {
-      if (!oldStream.getAudioTracks().includes(t)) oldStream.addTrack(t);
-    });
-
-    // Update attached element
     if (mediaElRef.current) {
       // @ts-ignore
-      mediaElRef.current.srcObject = oldStream;
+      mediaElRef.current.srcObject = s;
     }
-  }, [kind]);
+  }, []);
 
-  // Cleanup on unmount
+  const cycleCamera = useCallback(async () => {
+    if (kind !== 'video') return;
+    const s = streamRef.current;
+    if (!s) return;
+
+    // Cannot switch reliably while recording — some browsers glitch.
+    if (recorderRef.current && recorderRef.current.state === 'recording') {
+      // If you want: you can toast "Stop recording to switch camera"
+      return;
+    }
+
+    // Toggle front/back
+    const nextFacing: 'user' | 'environment' = facingRef.current === 'user' ? 'environment' : 'user';
+
+    // First attempt: facingMode toggle (best for iPhone)
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: getVideoConstraints({ facingMode: nextFacing }),
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      facingRef.current = nextFacing;
+      await replaceVideoTrack(newVideoTrack);
+
+      // Stop the temporary stream container (track is already moved/used)
+      newStream.getTracks().forEach((t) => {
+        if (t !== newVideoTrack) {
+          try {
+            t.stop();
+          } catch {}
+        }
+      });
+
+      return;
+    } catch {
+      // fall through to deviceId cycling
+    }
+
+    // Fallback: cycle deviceIds (less reliable on iOS, but better than nothing)
+    try {
+      if (!videoDeviceIdsRef.current.length) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        videoDeviceIdsRef.current = devices.filter((d) => d.kind === 'videoinput').map((d) => d.deviceId);
+        currentVideoIndexRef.current = 0;
+      }
+      if (videoDeviceIdsRef.current.length < 2) return;
+
+      currentVideoIndexRef.current =
+        (currentVideoIndexRef.current + 1) % videoDeviceIdsRef.current.length;
+      const deviceId = videoDeviceIdsRef.current[currentVideoIndexRef.current];
+
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: getVideoConstraints({ deviceId }),
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      await replaceVideoTrack(newVideoTrack);
+    } catch {
+      // give up silently
+    }
+  }, [kind, getVideoConstraints, replaceVideoTrack]);
+
   useEffect(() => {
     return () => {
       stopTick();
