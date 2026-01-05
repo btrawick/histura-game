@@ -8,7 +8,8 @@ import RecordButton from '@/components/RecordButton';
 import { pointsForDuration } from '@/lib/scoring';
 import { saveBlob } from '@/lib/storage';
 import type { SavedRecording } from '@/types';
-import { getRandomQuestionFor, questions as allQuestions } from '@/lib/questions-relations';
+import { questions as allQuestions } from '@/lib/questions-relations';
+import { getRandomQuestionFor } from '@/lib/questions-relations';
 
 type OverlayMode = 'ready' | 'countdown';
 
@@ -20,7 +21,6 @@ const otherPlayer = (id: 'p1' | 'p2'): 'p1' | 'p2' => (id === 'p1' ? 'p2' : 'p1'
 function usedKey(gameId: string, answerer: 'p1' | 'p2') {
   return `histura-usedq:${gameId}:${answerer}`;
 }
-
 function loadUsed(gameId: string, answerer: 'p1' | 'p2'): Set<string> {
   try {
     const raw = sessionStorage.getItem(usedKey(gameId, answerer));
@@ -31,7 +31,6 @@ function loadUsed(gameId: string, answerer: 'p1' | 'p2'): Set<string> {
     return new Set();
   }
 }
-
 function saveUsed(gameId: string, answerer: 'p1' | 'p2', used: Set<string>) {
   try {
     sessionStorage.setItem(usedKey(gameId, answerer), JSON.stringify(Array.from(used)));
@@ -60,33 +59,28 @@ export default function Play() {
   const mainMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const overlayMediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
 
-  // Pick a question with "no repeats for same answerer in same game"
+  const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
+
   function pickQuestionNoRepeat(answerer: 'p1' | 'p2') {
     const askerSide = askerSideForAnswerer(answerer);
-    const pool = allQuestions[relationship]?.[askerSide] ?? [];
-    if (pool.length === 0) {
+    const pool = allQuestions?.[relationship]?.[askerSide] ?? [];
+
+    if (!pool.length) {
       return getRandomQuestionFor(relationship, askerSide);
     }
 
     const used = loadUsed(currentGameId, answerer);
     const available = pool.filter((q) => !used.has(q.id));
+    const chosenPool = available.length ? available : pool;
+    const q = chosenPool[Math.floor(Math.random() * chosenPool.length)];
 
-    // If exhausted, reset used for that answerer & keep going
-    const chosenPool = available.length > 0 ? available : pool;
-
-    const idx = Math.floor(Math.random() * chosenPool.length);
-    const q = chosenPool[idx];
-
-    if (available.length === 0) {
-      used.clear();
-    }
+    if (!available.length) used.clear();
     used.add(q.id);
     saveUsed(currentGameId, answerer, used);
 
     return q;
   }
 
-  const [currentPlayer, setCurrentPlayer] = useState<'p1' | 'p2'>('p1');
   const [question, setQuestion] = useState(() => pickQuestionNoRepeat('p1'));
 
   const [overlay, setOverlay] = useState<{
@@ -106,18 +100,20 @@ export default function Play() {
   const [showSummary, setShowSummary] = useState(false);
   const [confetti, setConfetti] = useState(0);
 
+  // warm permission
   useEffect(() => {
     rec.ensurePermission().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Attach recorder stream to the *visible* element
   useEffect(() => {
     const el = overlay.show ? overlayMediaRef.current : mainMediaRef.current;
     if (el) rec.attach(el);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlay.show, preferredKind]);
 
-  // When relationship changes, re-pick (still respecting no-repeat for answerer)
+  // When relationship changes, pick a fresh question (still no-repeat for current answerer)
   useEffect(() => {
     setQuestion(pickQuestionNoRepeat(currentPlayer));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,14 +124,25 @@ export default function Play() {
     setTimeout(() => setConfetti((n) => n - 1), 1200);
   }
 
+  function closeOverlay() {
+    try {
+      rec.stop();
+    } catch {
+      // ignore
+    }
+    setOverlay((o) => ({ ...o, show: false }));
+    navigate('/');
+  }
+
   function beginCountdown(next: 'p1' | 'p2') {
     setOverlay({ show: true, next, mode: 'countdown', count: 3 });
+
     let c = 3;
-    const iv = setInterval(() => {
+    const iv = window.setInterval(() => {
       c -= 1;
       setOverlay((o) => ({ ...o, count: c }));
       if (c <= 0) {
-        clearInterval(iv);
+        window.clearInterval(iv);
         setOverlay({ show: false, next, mode: 'ready', count: 3 });
         startTurn(next);
       }
@@ -145,6 +152,7 @@ export default function Play() {
   function startTurn(next: 'p1' | 'p2') {
     setCurrentPlayer(next);
     setQuestion(pickQuestionNoRepeat(next));
+
     if (mainMediaRef.current) rec.attach(mainMediaRef.current);
     rec.start();
   }
@@ -155,6 +163,7 @@ export default function Play() {
 
     const dur = rec.elapsed;
     const points = pointsForDuration(dur, starScale);
+
     const id = crypto.randomUUID();
     const blobKey = await saveBlob(blob);
 
@@ -181,6 +190,8 @@ export default function Play() {
     if (points + players[currentPlayer].score > prevHigh) triggerConfetti();
 
     const pair = [...lastPair, meta];
+
+    // show summary every two turns (one per player)
     if (
       pair.length === 2 &&
       pair.some((m) => m.playerId === 'p1') &&
@@ -193,14 +204,6 @@ export default function Play() {
       setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
       if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
     }
-  }
-
-  function closeOverlay() {
-    try {
-      rec.stop();
-    } catch {}
-    setOverlay((o) => ({ ...o, show: false }));
-    navigate('/');
   }
 
   return (
@@ -218,46 +221,57 @@ export default function Play() {
         </button>
       </div>
 
-<div
-  className="card"
-  style={{
-    background: '#0b1220',
-    borderRadius: 12,
-    padding: 12,
-    position: 'relative',
-    overflow: 'hidden',
-
-    /* NEW: cap vertical height so buttons stay visible on small iPhones */
-    maxHeight: '45vh',
-  }}
->
-  {preferredKind === 'video' ? (
-    <video
-      ref={overlayMediaRef as any}
-      autoPlay
-      muted
-      playsInline
-      style={{
-        width: '100%',
-        borderRadius: 8,
-
-        /* NEW: keep video inside the capped box */
-        maxHeight: '40vh',
-        objectFit: 'cover',
-      }}
-    />
-  ) : (
-    <audio ref={overlayMediaRef as any} autoPlay />
-  )}
+      <div className="card">
+        <div className="label">Current Player (answering)</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img
+            src={
+              players[currentPlayer].avatarDataUrl ||
+              `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(
+                players[currentPlayer].name
+              )}`
+            }
+            width={40}
+            height={40}
+            style={{ borderRadius: 8 }}
+            alt=""
+          />
+          <strong>{players[currentPlayer].name}</strong> ({players[currentPlayer].role})
         </div>
       </div>
 
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="label">Prompt</div>
+        <div style={{ opacity: 0.8, marginBottom: 6 }}>
+          Asked by: <b>{players[otherPlayer(currentPlayer)].name}</b> ({players[otherPlayer(currentPlayer)].role})
+        </div>
+        <div style={{ fontSize: 20, marginBottom: 12 }}>{question.text}</div>
+
+        <TimerAndStars sec={rec.elapsed} />
+
+        <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <RecordButton recording={rec.recording} onStart={rec.start} onStop={handleStop} />
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          {preferredKind === 'video' ? (
+            <video
+              ref={mainMediaRef as any}
+              autoPlay
+              muted
+              playsInline
+              style={{ width: '100%', borderRadius: 8 }}
+            />
+          ) : (
+            <audio ref={mainMediaRef as any} autoPlay />
+          )}
+        </div>
+      </div>
+
+      {/* READY / COUNTDOWN OVERLAY */}
       {overlay.show && (
         <div className="overlay">
-          <div
-            className="overlay-card"
-            style={{ width: 520, maxWidth: '95vw', position: 'relative' }}
-          >
+          <div className="overlay-card" style={{ width: 520, maxWidth: '95vw', position: 'relative' }}>
             <button
               onClick={closeOverlay}
               title="Cancel"
@@ -289,6 +303,7 @@ export default function Play() {
               Asked by: <b>{players[otherPlayer(overlay.next)].name}</b> ({players[otherPlayer(overlay.next)].role})
             </div>
 
+            {/* Preview container with max vh so buttons are always visible on iPhone */}
             <div
               className="card"
               style={{
@@ -297,6 +312,7 @@ export default function Play() {
                 padding: 12,
                 position: 'relative',
                 overflow: 'hidden',
+                maxHeight: '45vh',
               }}
             >
               {preferredKind === 'video' ? (
@@ -305,7 +321,12 @@ export default function Play() {
                   autoPlay
                   muted
                   playsInline
-                  style={{ width: '100%', borderRadius: 8 }}
+                  style={{
+                    width: '100%',
+                    borderRadius: 8,
+                    maxHeight: '40vh',
+                    objectFit: 'cover',
+                  }}
                 />
               ) : (
                 <audio ref={overlayMediaRef as any} autoPlay />
@@ -385,8 +406,8 @@ export default function Play() {
           }}
           onContinue={() => {
             setShowSummary(false);
-            const other: 'p1' | 'p2' = currentPlayer === 'p1' ? 'p2' : 'p1';
-            setOverlay({ show: true, next: other, mode: 'ready', count: 3 });
+            const next: 'p1' | 'p2' = currentPlayer === 'p1' ? 'p2' : 'p1';
+            setOverlay({ show: true, next, mode: 'ready', count: 3 });
             if (overlayMediaRef.current) rec.attach(overlayMediaRef.current);
           }}
         />
@@ -406,14 +427,17 @@ function RoundSummary({
   const recent = recordings.slice(0, 2);
   if (recent.length < 2) return null;
 
-  const p1 = recent.find((r) => r.meta.playerId === 'p1')!;
-  const p2 = recent.find((r) => r.meta.playerId === 'p2')!;
+  const p1 = recent.find((r) => r.meta.playerId === 'p1');
+  const p2 = recent.find((r) => r.meta.playerId === 'p2');
+  if (!p1 || !p2) return null;
+
   const winner =
     p1.meta.points === p2.meta.points
       ? 'Tie'
       : p1.meta.points > p2.meta.points
       ? players.p1.name
       : players.p2.name;
+
   const longest =
     p1.meta.durationSec === p2.meta.durationSec
       ? 'Tie'
@@ -498,4 +522,3 @@ function EndGameOverlay({
     </div>
   );
 }
-
