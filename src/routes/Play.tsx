@@ -218,49 +218,37 @@ export default function Play() {
         </button>
       </div>
 
-      <div className="card">
-        <div className="label">Current Player (answering)</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img
-            src={
-              players[currentPlayer].avatarDataUrl ||
-              `https://api.dicebear.com/9.x/fun-emoji/svg?seed=${encodeURIComponent(
-                players[currentPlayer].name
-              )}`
-            }
-            width={40}
-            height={40}
-            style={{ borderRadius: 8 }}
-          />
-          <strong>{players[currentPlayer].name}</strong> ({players[currentPlayer].role})
-        </div>
-      </div>
+<div
+  className="card"
+  style={{
+    background: '#0b1220',
+    borderRadius: 12,
+    padding: 12,
+    position: 'relative',
+    overflow: 'hidden',
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="label">Prompt</div>
-        <div style={{ opacity: 0.8, marginBottom: 6 }}>
-          Asked by: <b>{players[otherPlayer(currentPlayer)].name}</b> ({players[otherPlayer(currentPlayer)].role})
-        </div>
-        <div style={{ fontSize: 20, marginBottom: 12 }}>{question.text}</div>
+    /* NEW: cap vertical height so buttons stay visible on small iPhones */
+    maxHeight: '45vh',
+  }}
+>
+  {preferredKind === 'video' ? (
+    <video
+      ref={overlayMediaRef as any}
+      autoPlay
+      muted
+      playsInline
+      style={{
+        width: '100%',
+        borderRadius: 8,
 
-        <TimerAndStars sec={rec.elapsed} />
-
-        <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-          <RecordButton recording={rec.recording} onStart={rec.start} onStop={handleStop} />
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          {preferredKind === 'video' ? (
-            <video
-              ref={mainMediaRef as any}
-              autoPlay
-              muted
-              playsInline
-              style={{ width: '100%', borderRadius: 8 }}
-            />
-          ) : (
-            <audio ref={mainMediaRef as any} autoPlay />
-          )}
+        /* NEW: keep video inside the capped box */
+        maxHeight: '40vh',
+        objectFit: 'cover',
+      }}
+    />
+  ) : (
+    <audio ref={overlayMediaRef as any} autoPlay />
+  )}
         </div>
       </div>
 
